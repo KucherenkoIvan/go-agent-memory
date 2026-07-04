@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  # standard set: errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - misspell
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # the domain layer imports only the stdlib and the kernel's ddd
+        # package — extend the allow list with internal/shared/domain when it
+        # appears, and update the module path when renaming the project
+        domain-purity:
+          list-mode: strict
+          files:
+            - "**/domain/**"
+            - "!**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/KucherenkoIvan/go-kernel/ddd
+
+formatters:
+  enable:
+    - gofmt

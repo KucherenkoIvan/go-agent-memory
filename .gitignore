@@ -1,0 +1,20 @@
+# binaries & build artifacts
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# personal env overrides (.env itself is committed — shared dev defaults)
+.env.local
+
+# local databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# editors & OS
+.DS_Store
+.idea/
+.vscode/
