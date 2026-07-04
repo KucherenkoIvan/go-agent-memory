@@ -15,6 +15,8 @@ type MemoryRepository interface {
 	Save(ctx context.Context, tx ddd.Transaction, memory *domain.Memory) error
 	// GetByID returns (nil, nil) when the memory does not exist.
 	GetByID(ctx context.Context, tx ddd.Transaction, id domain.MemoryID) (*domain.Memory, error)
+	// Delete removes the row for good — human prune only, never agents.
+	Delete(ctx context.Context, tx ddd.Transaction, id domain.MemoryID) error
 }
 
 // SearchFilters compose with AND. Zero values mean "no filter".

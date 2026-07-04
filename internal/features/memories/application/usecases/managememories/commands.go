@@ -77,6 +77,35 @@ func (c *StoreCommand) Execute(ctx context.Context, in StoreInput) (domain.Memor
 	return memory.ID(), nil
 }
 
+// DeleteCommand — hard prune, the one destructive operation. Reserved for
+// humans (TUI); agents correct via supersede instead. Dangling
+// superseded_by references to a deleted id are accepted.
+type DeleteCommand struct {
+	txManager ddd.TxManager
+	repo      ports.MemoryRepository
+	events    ports.MemoryEventProducer
+}
+
+func NewDeleteCommand(txManager ddd.TxManager, repo ports.MemoryRepository, events ports.MemoryEventProducer) *DeleteCommand {
+	return &DeleteCommand{txManager: txManager, repo: repo, events: events}
+}
+
+func (c *DeleteCommand) Execute(ctx context.Context, id domain.MemoryID) error {
+	return c.txManager.WithinTx(ctx, func(tx ddd.Transaction) error {
+		memory, err := c.repo.GetByID(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if memory == nil {
+			return &domain.MemoryNotFoundError{}
+		}
+		if err := c.repo.Delete(ctx, tx, id); err != nil {
+			return err
+		}
+		return c.events.Publish(ctx, tx, domain.NewMemoryDeletedEvent(domain.MemoryDeletedData{MemoryID: id}))
+	})
+}
+
 // RateCommand — explicit usefulness feedback after an agent used a memory.
 type RateCommand struct {
 	txManager ddd.TxManager

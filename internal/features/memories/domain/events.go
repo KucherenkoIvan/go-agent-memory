@@ -6,6 +6,7 @@ const (
 	MemoryStoredEventName     = "MemoryStoredEvent"
 	MemoryRatedEventName      = "MemoryRatedEvent"
 	MemorySupersededEventName = "MemorySupersededEvent"
+	MemoryDeletedEventName    = "MemoryDeletedEvent"
 )
 
 type MemoryStoredData struct {
@@ -40,4 +41,14 @@ type MemorySupersededEvent = ddd.Event[MemorySupersededData]
 
 func NewMemorySupersededEvent(data MemorySupersededData) MemorySupersededEvent {
 	return ddd.NewEvent(MemorySupersededEventName, data)
+}
+
+type MemoryDeletedData struct {
+	MemoryID MemoryID
+}
+
+type MemoryDeletedEvent = ddd.Event[MemoryDeletedData]
+
+func NewMemoryDeletedEvent(data MemoryDeletedData) MemoryDeletedEvent {
+	return ddd.NewEvent(MemoryDeletedEventName, data)
 }

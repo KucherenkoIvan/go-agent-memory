@@ -85,6 +85,14 @@ func (r *MemoryRepository) GetByID(ctx context.Context, tx ddd.Transaction, id d
 	return domain.RestoreMemory(snap), nil
 }
 
+func (r *MemoryRepository) Delete(ctx context.Context, tx ddd.Transaction, id domain.MemoryID) error {
+	// the memories_fts_delete trigger removes the FTS row
+	if _, err := r.db.Resolve(tx).ExecContext(ctx, `DELETE FROM memories WHERE id = $1`, string(id)); err != nil {
+		return fmt.Errorf("deleting memory: %w", err)
+	}
+	return nil
+}
+
 func packKeywords(keywords []string) string {
 	return " " + strings.Join(keywords, " ") + " "
 }

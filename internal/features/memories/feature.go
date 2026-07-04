@@ -24,6 +24,9 @@ type Service interface {
 	Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error)
 	Rate(ctx context.Context, id domain.MemoryID, up bool) error
 	Recall(ctx context.Context, keywords []string, budgetChars int) (string, error)
+	// Delete hard-prunes a memory. Human faces only (TUI) — never exposed
+	// to agents via MCP; agents correct with supersede instead.
+	Delete(ctx context.Context, id domain.MemoryID) error
 }
 
 // New wires the local Service: port → adapter, then use-cases.
@@ -36,6 +39,7 @@ func New(db *kernelsqlite.Client, pub *events.ChannelPublisher) Service {
 	return &localService{
 		store:  managememories.NewStoreCommand(txManager, ddd.UUIDv7Generator{}, ddd.SystemClock{}, repo, producer),
 		rate:   managememories.NewRateCommand(txManager, repo, producer),
+		delete: managememories.NewDeleteCommand(txManager, repo, producer),
 		search: managememories.NewSearchQuery(reader),
 		get:    managememories.NewGetQuery(reader),
 		recall: managememories.NewRecallQuery(reader),
@@ -45,6 +49,7 @@ func New(db *kernelsqlite.Client, pub *events.ChannelPublisher) Service {
 type localService struct {
 	store  *managememories.StoreCommand
 	rate   *managememories.RateCommand
+	delete *managememories.DeleteCommand
 	search *managememories.SearchQuery
 	get    *managememories.GetQuery
 	recall *managememories.RecallQuery
@@ -68,4 +73,8 @@ func (s *localService) Rate(ctx context.Context, id domain.MemoryID, up bool) er
 
 func (s *localService) Recall(ctx context.Context, keywords []string, budgetChars int) (string, error) {
 	return s.recall.Execute(ctx, keywords, budgetChars)
+}
+
+func (s *localService) Delete(ctx context.Context, id domain.MemoryID) error {
+	return s.delete.Execute(ctx, id)
 }

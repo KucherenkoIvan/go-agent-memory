@@ -217,6 +217,44 @@ func TestTTL_ExpiredLeavesDefaultSearch(t *testing.T) {
 	}
 }
 
+func TestDelete_RemovesForGood(t *testing.T) {
+	svc, store := setup(t)
+	ctx := context.Background()
+
+	id := mustStore(t, svc, managememories.StoreInput{
+		Content: "obsolete garbage", Summary: "to be pruned",
+		Kind: "fact", Keywords: []string{"prune-me"},
+	})
+
+	if err := svc.Delete(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+
+	var notFound *domain.MemoryNotFoundError
+	if _, err := svc.Get(ctx, id); !errors.As(err, &notFound) {
+		t.Fatalf("get after delete: %v", err)
+	}
+	if err := svc.Delete(ctx, id); !errors.As(err, &notFound) {
+		t.Fatalf("double delete: %v", err)
+	}
+
+	// the FTS trigger must have dropped the index row too
+	results, err := svc.Search(ctx, ports.SearchFilters{Query: "obsolete garbage", IncludeDead: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("FTS row survived delete: %+v", results)
+	}
+	var ftsRows int
+	if err := store.DB.DB().QueryRowContext(ctx, `SELECT count(*) FROM memories_fts WHERE memories_fts MATCH 'obsolete'`).Scan(&ftsRows); err != nil {
+		t.Fatal(err)
+	}
+	if ftsRows != 0 {
+		t.Fatalf("fts table still has %d rows", ftsRows)
+	}
+}
+
 func TestRecall_AssemblesWithinBudget(t *testing.T) {
 	svc, _ := setup(t)
 	ctx := context.Background()
