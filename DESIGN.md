@@ -59,9 +59,15 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
   *History: v2 of this design used a flock to enforce single-process instead; reversed once `agmem mcp` living in a harness config made the lock hold for entire sessions, blocking every CLI call meanwhile.*
 - Implicit access-count updates are fire-and-forget single-statement writes (no transactions on the read path).
 
-## Remote mode (phase 3)
+## Remote mode (phase 3 — shipped)
 
-`agmem serve` is, ironically, the *classic* template shape: single process owning the file (multi-process concerns vanish), gRPC via the kernel, health endpoints, `app.Run`. Contract lives in this repo's own `contracts/` (nothing else imports it; the explorer reaches it via reflection). Auth: API keys (hashed at rest) checked by a `grpckit.WithUnaryInterceptor`; the key identity becomes `source`, so shared memory attributes writers automatically. One shared memory space per server in the first cut; multi-space/tenancy only if ever needed.
+`agmem serve` hosts shared memory over gRPC via the kernel (`grpckit` + `app.Run` + gRPC health + reflection). The contract lives in **go-kernel's `contracts/`** tree (`grpc/agmem/v1`); agmem imports the generated package.
+
+**Tenancy: named spaces, N API keys per space.** A key (hashed at rest, `agm_`-prefixed, checked by a `grpckit.WithUnaryInterceptor`) both authenticates and selects its space; the key's name becomes `source`, so shared memory attributes writers automatically. Revoking one teammate's key never rotates the others.
+
+**One SQLite file per space** (`<server-dir>/spaces/<name>.db`, names locked to `[a-z0-9-]+`): isolation by construction — no space column, no WHERE-clause to forget — and every space file is byte-identical to a local `memory.db`. Migrate-to-local is `agmem spaces export` (live-safe `VACUUM INTO`) + `AGMEM_DB=<file>`; migrate-to-hosted is copying a local file in. A lazy `SpaceRegistry` opens spaces on first use; `keys.db` (own migration set) is the control plane.
+
+**Client side:** `agmem remote set <addr> <key>` (verified before saving; config at `~/.config/agmem/remote.json`, 0600; `AGMEM_REMOTE_ADDR`/`AGMEM_API_KEY` override per-field) swaps the local Service for the gRPC client inside `connect()` — every face (CLI, MCP, TUI) follows automatically, and typed domain errors survive the wire. Transport is plaintext: private network or TLS-terminating proxy.
 
 ## Surfaces (sketch)
 

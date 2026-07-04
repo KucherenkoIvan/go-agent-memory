@@ -31,6 +31,25 @@ MCP config (any harness):
 {"mcpServers": {"agmem": {"command": "agmem", "args": ["mcp"]}}}
 ```
 
+## Shared memory (hosted mode)
+
+The same binary hosts and consumes shared memory over gRPC. An API key both authenticates a caller and selects its **space**; spaces are hard-isolated, one SQLite file each, and a space file is byte-identical to a local `memory.db`.
+
+```sh
+# on the server (plaintext gRPC — private network or TLS proxy in front):
+agmem serve --addr :7846                       # data in ~/.local/share/agmem/server
+agmem keys create --space team-x --name ivan   # prints the key exactly once
+agmem keys revoke <id>                         # one teammate out, others unaffected
+agmem spaces export team-x ./team-x.db         # live-safe snapshot = a local memory.db
+
+# on any client — every face (CLI, MCP, TUI) follows automatically:
+agmem remote set memory.example:7846 agm_...   # verified before saving
+agmem remote status                            # server + auth probes, key masked
+agmem remote unset                             # back to the local file
+```
+
+Stored memories' `source` becomes the key's name server-side, so shared writes attribute themselves. Migrate-to-local is `spaces export` + `AGMEM_DB=<file>`; migrate-to-hosted is copying a local `memory.db` into `spaces/<name>.db`.
+
 ## How it behaves
 
 - **The memory is global by default**: `~/.local/share/agmem/memory.db`, overridable with `AGMEM_DB`. Cross-session knowledge is the point.
@@ -41,7 +60,7 @@ MCP config (any harness):
 
 ## Architecture
 
-Built on [go-kernel](https://github.com/KucherenkoIvan/go-kernel) (DDD + hexagonal, from the [tinycore template](https://github.com/KucherenkoIvan/go-tinycore-template)): the `Memory` aggregate owns the invariants, MCP/CLI are thin transport adapters over one `Service` facade — designed so a hosted mode (gRPC + API keys, phase 3) slots in behind the same facade. One documented deviation: FTS5 is maintained by SQL triggers, because the file is shared by multiple processes and in-process events can't index foreign writes. See [DESIGN.md](DESIGN.md) for the full design and phases.
+Built on [go-kernel](https://github.com/KucherenkoIvan/go-kernel) (DDD + hexagonal, from the [tinycore template](https://github.com/KucherenkoIvan/go-tinycore-template)): the `Memory` aggregate owns the invariants, MCP/CLI are thin transport adapters over one `Service` facade — which is exactly what makes remote mode a drop-in: `agmem remote set` swaps the local implementation for a gRPC client and no face notices. The gRPC contract lives in the kernel's `contracts/` tree. One documented deviation: FTS5 is maintained by SQL triggers, because the file is shared by multiple processes and in-process events can't index foreign writes. See [DESIGN.md](DESIGN.md) for the full design and phases.
 
 ## License
 

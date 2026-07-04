@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 
 	"github.com/KucherenkoIvan/go-kernel/events"
+	"github.com/KucherenkoIvan/go-kernel/grpckit"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/apikeys"
 	apikeyscli "github.com/KucherenkoIvan/go-agent-memory/internal/features/apikeys/adapters/cli"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/cli"
+	grpcadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/grpc"
 	mcpadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/mcp"
+	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/remotecfg"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/storage"
 )
 
@@ -28,6 +31,17 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	connect := func(ctx context.Context) (memories.Service, func(), error) {
+		// remote mode: one config file flips every face to the hosted memory
+		if remote, err := remotecfg.Resolve(); err != nil {
+			return nil, nil, err
+		} else if remote != nil {
+			conn, err := grpckit.Connect(remote.Addr)
+			if err != nil {
+				return nil, nil, err
+			}
+			return grpcadapter.NewClient(conn, remote.APIKey), func() { _ = conn.Close() }, nil
+		}
+
 		path := os.Getenv("AGMEM_DB")
 		if path == "" {
 			var err error
@@ -46,7 +60,7 @@ func main() {
 
 		cleanup := func() {
 			_ = pub.Close(context.Background()) // drain in-process reactions
-			_ = store.Close()                   // releases the flock
+			_ = store.Close()
 		}
 		return svc, cleanup, nil
 	}

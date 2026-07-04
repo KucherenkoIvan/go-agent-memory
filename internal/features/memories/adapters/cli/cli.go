@@ -67,6 +67,7 @@ func New(version string, connect Connect, runMCP func(ctx context.Context, svc m
 		recallCmd(withService),
 		promptCmd(),
 		mcpCmd(withService, runMCP),
+		remoteCmd(opts),
 	)
 	root.AddCommand(extra...)
 	return root
