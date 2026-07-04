@@ -42,10 +42,8 @@ type Store struct {
 // Concurrent agmem processes are fine — migrations are the one racy moment,
 // and they are idempotent (schema_migrations) and fast.
 func Open(ctx context.Context, path string) (*Store, error) {
-	if !strings.Contains(path, ":memory:") {
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return nil, fmt.Errorf("storage: creating data dir: %w", err)
-		}
+	if err := ensureDir(path); err != nil {
+		return nil, err
 	}
 
 	db, err := sqlite.Open(path)
@@ -69,4 +67,14 @@ func Open(ctx context.Context, path string) (*Store, error) {
 // Close closes the database.
 func (s *Store) Close() error {
 	return s.DB.Close()
+}
+
+func ensureDir(path string) error {
+	if strings.Contains(path, ":memory:") {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("storage: creating data dir: %w", err)
+	}
+	return nil
 }
