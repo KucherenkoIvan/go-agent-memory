@@ -71,9 +71,11 @@ func (q *RecallQuery) Execute(ctx context.Context, keywords []string, budgetChar
 		budgetChars = defaultRecallChars
 	}
 
+	// OR semantics on purpose: session bootstrap throws candidate keywords
+	// at the store — any match qualifies, more matches rank higher.
 	results, err := q.reader.Search(ctx, ddd.NoTransaction, ports.SearchFilters{
-		Keywords: domain.NormalizeKeywords(keywords),
-		Limit:    recallSearchLimit,
+		KeywordsAny: domain.NormalizeKeywords(keywords),
+		Limit:       recallSearchLimit,
 	})
 	if err != nil {
 		return "", err

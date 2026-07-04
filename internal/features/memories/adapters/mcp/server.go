@@ -47,7 +47,7 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "recall",
-		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget.",
+		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
 	}, recallHandler(svc))
 
 	return server
@@ -159,7 +159,7 @@ func rateHandler(svc memories.Service) sdk.ToolHandlerFor[rateIn, rateOut] {
 }
 
 type recallIn struct {
-	Keywords    []string `json:"keywords"`
+	Keywords    []string `json:"keywords" jsonschema:"any may match (OR); more matches rank higher"`
 	BudgetChars int      `json:"budgetChars,omitempty" jsonschema:"max characters, default 4000"`
 }
 

@@ -11,6 +11,10 @@ A shared memory survives across sessions, models, and harnesses. Use it via the 
     agmem recall -k <topic> -k <topic>       # ranked memories as one block
     agmem search -q "<free text>" -k <topic> # or browse summaries first
 
+Recall keywords OR-match: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. Search keywords AND-match: use them to narrow.
+
+If agmem returns nothing relevant, fall back to your harness's builtin memory (if you have one) — and store anything useful you find there into agmem so it is shared next time.
+
 **When you rely on a memory** — rate it afterwards; ratings drive ranking for future agents:
 
     agmem rate <id> up      # it was correct and helped

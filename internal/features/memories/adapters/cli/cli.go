@@ -183,7 +183,7 @@ func recallCmd(withService func(func(*cobra.Command, []string, memories.Service)
 	)
 	cmd := &cobra.Command{
 		Use:   "recall",
-		Short: "Assemble top-ranked memories into one context block",
+		Short: "Assemble top-ranked memories into one context block (keywords OR-match)",
 		RunE: withService(func(cmd *cobra.Command, _ []string, svc memories.Service) error {
 			pack, err := svc.Recall(cmd.Context(), keywords, budget)
 			if err != nil {
@@ -193,7 +193,7 @@ func recallCmd(withService func(func(*cobra.Command, []string, memories.Service)
 			return nil
 		}),
 	}
-	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword (repeatable)")
+	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword (repeatable, any may match — more matches rank higher)")
 	cmd.Flags().IntVar(&budget, "budget", 0, "character budget (default 4000)")
 	_ = cmd.MarkFlagRequired("keyword")
 	return cmd

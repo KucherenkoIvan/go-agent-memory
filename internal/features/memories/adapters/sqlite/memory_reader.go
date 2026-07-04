@@ -23,6 +23,7 @@ const (
 	weightAccess  = 0.05 // per access, capped
 	accessCap     = 20
 	weightRecency = 3.0 // decays with age: w / (1 + age_days/30)
+	weightKeyword = 1.5 // per matched KeywordsAny keyword — more matches rank higher
 )
 
 type MemoryReader struct {
@@ -63,6 +64,17 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 	}
 	for _, kw := range f.Keywords {
 		where = append(where, "instr(m.keywords, "+arg(" "+kw+" ")+") > 0")
+	}
+	if len(f.KeywordsAny) > 0 {
+		// one clause per keyword, reused twice: OR-joined as the filter,
+		// summed (booleans are 0/1) as the match-count ranking signal —
+		// parenthesized because + binds tighter than > in SQLite
+		matches := make([]string, 0, len(f.KeywordsAny))
+		for _, kw := range f.KeywordsAny {
+			matches = append(matches, "(instr(m.keywords, "+arg(" "+kw+" ")+") > 0)")
+		}
+		where = append(where, "("+strings.Join(matches, " OR ")+")")
+		score += fmt.Sprintf(" + (%s) * %v", strings.Join(matches, " + "), weightKeyword)
 	}
 	if f.Kind != "" {
 		where = append(where, "m.kind = "+arg(f.Kind))

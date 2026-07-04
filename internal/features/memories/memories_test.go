@@ -247,3 +247,47 @@ func TestRecall_AssemblesWithinBudget(t *testing.T) {
 		t.Fatalf("empty recall: %q", empty)
 	}
 }
+
+func TestRecall_KeywordsORMatch_MoreMatchesRankHigher(t *testing.T) {
+	svc, _ := setup(t)
+	ctx := context.Background()
+
+	mustStore(t, svc, managememories.StoreInput{
+		Content: "only the go keyword", Summary: "go-only notes",
+		Kind: "fact", Keywords: []string{"go"},
+	})
+	mustStore(t, svc, managememories.StoreInput{
+		Content: "only the project keyword", Summary: "project-only notes",
+		Kind: "fact", Keywords: []string{"project:app"},
+	})
+	mustStore(t, svc, managememories.StoreInput{
+		Content: "both keywords", Summary: "both notes",
+		Kind: "fact", Keywords: []string{"go", "project:app"},
+	})
+
+	// any keyword qualifies — unknown ones don't empty the result
+	pack, err := svc.Recall(ctx, []string{"go", "project:app", "no-such-topic"}, 4000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"go-only notes", "project-only notes", "both notes"} {
+		if !strings.Contains(pack, want) {
+			t.Fatalf("OR recall must include %q:\n%s", want, pack)
+		}
+	}
+
+	// the memory matching more keywords comes first
+	if strings.Index(pack, "both notes") > strings.Index(pack, "go-only notes") ||
+		strings.Index(pack, "both notes") > strings.Index(pack, "project-only notes") {
+		t.Fatalf("double match must rank first:\n%s", pack)
+	}
+
+	// search keeps AND semantics: both keywords → only the double-tagged one
+	results, err := svc.Search(ctx, ports.SearchFilters{Keywords: []string{"go", "project:app"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Summary != "both notes" {
+		t.Fatalf("search must stay AND: %+v", results)
+	}
+}

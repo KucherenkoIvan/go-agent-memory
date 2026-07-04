@@ -37,7 +37,7 @@ Events (`MemoryStored/Superseded/Rated`) remain for in-process reactions (TUI re
 Search order = weighted blend, computed in SQL, tunable constants in one place:
 
 ```
-score = bm25(FTS match) ⊕ rating (upvotes − downvotes, damped) ⊕ recency ⊕ access count (log-damped)
+score = bm25(FTS match) ⊕ rating (upvotes − downvotes, damped) ⊕ recency ⊕ access count (log-damped) ⊕ keyword matches (recall: keywords OR-filter, each match boosts)
 ```
 
 Explicit feedback dominates implicit: a memory that agents *said* helped outranks one that merely got fetched. Downvoted-into-the-ground memories surface in a TUI "review candidates" view rather than being auto-deleted. No ML, no embeddings in MVP — sqlite-vec behind the same reader port later if FTS proves insufficient.

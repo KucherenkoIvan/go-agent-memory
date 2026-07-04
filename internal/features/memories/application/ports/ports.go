@@ -21,10 +21,13 @@ type MemoryRepository interface {
 type SearchFilters struct {
 	Query    string   // FTS5 match over summary+content+keywords
 	Keywords []string // every keyword must be present
-	Kind     string
-	Since    time.Time
-	Until    time.Time
-	Limit    int
+	// KeywordsAny keeps memories carrying at least one of these keywords;
+	// each additional match boosts rank. Recall's keyword semantics.
+	KeywordsAny []string
+	Kind        string
+	Since       time.Time
+	Until       time.Time
+	Limit       int
 	// IncludeDead includes superseded and expired memories.
 	IncludeDead bool
 }
