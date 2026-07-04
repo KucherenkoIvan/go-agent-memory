@@ -1,58 +1,82 @@
 # go-agent-memory — Design
 
-A harness-agnostic memory system for AI agents: research results, preferences, decisions, and locations stored in a single SQLite file, findable by keyword, date, and a project/task tree — so a fresh agent can discover what past agents learned, regardless of which model or harness either of them ran on.
+A harness-agnostic memory system for AI agents: research results, preferences, decisions, and locations stored in SQLite, findable by keyword, full-text search, and date — ranked by how useful past agents found them — so a fresh agent discovers what earlier agents learned, regardless of which model or harness either ran on.
 
-The memory **is one `.db` file**. No daemon required, no vendor lock, no dependence on any harness's built-in memory. Working name: repo `go-agent-memory`, binary **`agmem`**.
+Local-first: the memory **is one `.db` file**, no daemon required. Optionally hosted: the same core behind a gRPC server with API keys, accessed by the same CLI/TUI/MCP faces. Working name: repo `go-agent-memory`, binary **`agmem`**.
 
 ## Faces
 
-Same split as everything in this family — machine faces and a human face over one core:
+- **MCP server** (`agmem mcp`, stdio) — the flagship adapter: one config line in any MCP-capable harness.
+- **CLI** (`agmem store|search|get|rate|recall ...`) — for harnesses that shell out: one-shot commands, stable JSON output, exit codes, no prompts.
+- **TUI** (`agmem tui`) — the human face: browse, search, read, correct, prune.
+- **Server** (`agmem serve`, phase 3) — gRPC hosting for shared/team memory; see Remote mode.
 
-- **MCP server** (`agmem mcp`, stdio) — the flagship adapter: any MCP-capable harness gets `store_memory` / `search_memory` / tree tools by adding one line to its server config.
-- **CLI** (`agmem store|search|get|tree ...`) — for harnesses/agents that prefer shelling out: one-shot commands, stable JSON output, exit codes, no prompts. Same agent contract rules as the explorer design.
-- **TUI** (`agmem tui`) — for the human: browse the tree, search, read, prune, correct what agents wrote.
-
-One binary, subcommands select the face — an MCP config points at `agmem mcp` and nothing else needs installing.
+All faces sit on a small **application facade** with two implementations: *local* (in-process use-cases over the file) and *remote* (gRPC client) — so `--remote host:port --api-key ...` makes the same CLI/TUI/MCP talk to a hosted memory. This facade exists from day one even though remote ships later.
 
 ## Domain
 
-| Concept | Kind | Notes |
-|---|---|---|
-| `Memory` | aggregate | content (markdown), kind (`fact` / `preference` / `research` / `decision` / `location` / `reference`), keywords, source (harness/model/session that wrote it), optional node attachment, timestamps. Invariants: non-empty content, valid kind, keyword normalization |
-| supersede | aggregate behavior | memories are never edited by agents — a correction **supersedes** (new memory linking the old; old drops out of default search). Humans may hard-edit/delete via TUI |
-| `Node` | aggregate | the project/task tree: name, kind (`project` / `task` / `topic`), parent. Invariants: parent exists, no cycles, no self-parenting |
-| `MemoryStored/Superseded`, `NodeCreated/...` | events | feed stats and future policies |
-| search, timeline, tree, stats | read-models | keyword + full-text + date-range + node-scope + kind filters, ranked |
+**`Memory`** — the only aggregate:
 
-Feature split: **`memories`** and **`tree`**, with `memories → tree` through a shared port (attachment validation) — or one feature if the boundary feels forced during implementation; decided by code, not by this doc.
+| Field | Notes |
+|---|---|
+| content | markdown, non-empty |
+| **summary** | one line; what search results show — agents scan summaries cheaply, then `get` the full body |
+| kind | `fact` / `preference` / `research` / `decision` / `location` / `reference` |
+| keywords | normalized, unlimited; hierarchy conventions live here (`project:go-kernel`, `task:lint`) — **there is no tree** (see below) |
+| source | free-form writer identity (harness/model/session); server mode derives it from the API key |
+| **ttl (hours, optional)** | time-boxed facts ("deploy freeze until Friday"). Expired memories drop out of default search like superseded ones; physical pruning is a later policy |
+| rating signals | up/down votes (explicit feedback via `rate`) + access count / last-accessed (implicit) |
+| supersede link | agents never edit — a correction **supersedes** (new memory pointing at the old, which leaves default search). Humans may hard-edit/delete via TUI |
 
-## The two design decisions that matter
+**No `Node` tree.** Cut on cold-start grounds: a hierarchy nobody has populated is a hierarchy nobody will query, and everything a `project/task/topic` node would say is already a keyword. Conventional keyword prefixes give hierarchy-like scoping for free and require no ceremony from agents. If real grouping needs emerge, they materialize as *views over keywords*, not schema.
 
-**1. Full-text search: FTS5 via SQL triggers, not a projector.** modernc's SQLite includes FTS5. The architecture-pure move would be an index-projector on `MemoryStored` — but this database is deliberately **multi-process** (a long-running MCP server *and* one-shot CLI invocations touching the same file), and in-process events can't index another process's writes. DB-level triggers keep the FTS index atomic with every writer. This is a conscious, documented deviation: consistency mechanics belong to the storage layer when the storage is shared; events remain for in-process reactions (TUI refresh, stats, future policies).
+Events (`MemoryStored/Superseded/Rated`) remain for in-process reactions (TUI refresh, stats, future policies).
 
-**2. Multi-process SQLite is allowed here — deliberately relaxing the template rule.** The "one process per file" rule guards *service replicas*; local same-machine multi-process access is exactly what WAL is designed for. Rules that make it safe: WAL + busy_timeout (kernel defaults), short transactions, all writers on the same machine (the file never lives on NFS). Documented in the README as a first-class property, since it's the whole deployment model.
+## Ranking
 
-## Self-management (explicitly out of MVP)
+Search order = weighted blend, computed in SQL, tunable constants in one place:
 
-Retention/decay, near-duplicate detection, LLM summarization/consolidation — all designed as **policies behind ports** (`SummarizerGateway` that an adapter may implement with any model, or not at all). The system must be fully useful with zero LLM calls of its own; that's part of harness-agnosticism. Ships as increments after the core proves itself.
+```
+score = bm25(FTS match) ⊕ rating (upvotes − downvotes, damped) ⊕ recency ⊕ access count (log-damped)
+```
+
+Explicit feedback dominates implicit: a memory that agents *said* helped outranks one that merely got fetched. Downvoted-into-the-ground memories surface in a TUI "review candidates" view rather than being auto-deleted. No ML, no embeddings in MVP — sqlite-vec behind the same reader port later if FTS proves insufficient.
+
+## Agent flows (the product, really)
+
+**Discover:** `search` with task keywords → ranked list of *summaries* + snippets + ids (cheap to scan) → `get` the few that matter → after using one, `rate` it. For cold starts: `search` with no query returns the recent timeline.
+
+**Recall pack:** `recall(keywords, budget)` — the one-call version: assembles the top-ranked memories into a single markdown block trimmed to a size budget, ready to drop into context. This is the tool agents will actually reach for at session start.
+
+**Store:** finish work → `store` with content, one-line summary, keywords, kind, optional ttl. **Search-before-store is the convention** (avoid near-duplicates); updating existing knowledge = `store --supersedes <id>`.
+
+**Teach the agents:** `agmem prompt` prints a recommended instructions block (when to search, how to store, keyword conventions, rating etiquette) for pasting into a harness's AGENTS.md/CLAUDE.md — the system documents its own usage contract.
+
+## Storage decisions
+
+- **FTS5 via SQL triggers, not a projector** — the file is multi-process (MCP server + CLI one-shots), and in-process events can't index another process's writes. Consistency mechanics live in the storage layer when storage is shared.
+- **Multi-process local SQLite is explicitly allowed** — deliberate relaxation of the template's one-process rule (which guards service replicas); WAL + busy_timeout + short transactions + same-machine only.
+- Implicit access-count updates are fire-and-forget single-statement writes (no transactions on the read path).
+
+## Remote mode (phase 3)
+
+`agmem serve` is, ironically, the *classic* template shape: single process owning the file (multi-process concerns vanish), gRPC via the kernel, health endpoints, `app.Run`. Contract lives in this repo's own `contracts/` (nothing else imports it; the explorer reaches it via reflection). Auth: API keys (hashed at rest) checked by a `grpckit.WithUnaryInterceptor`; the key identity becomes `source`, so shared memory attributes writers automatically. One shared memory space per server in the first cut; multi-space/tenancy only if ever needed.
 
 ## Surfaces (sketch)
 
-MCP tools: `store_memory(content, kind, keywords[], node?, source)` · `search_memory(query?, keywords[]?, kind?, node?, since?/until?, limit)` · `get_memory(id)` · `supersede_memory(id, content, ...)` · `create_node(name, kind, parent?)` · `get_tree(root?)` · `attach_memory(id, node)`.
-CLI mirrors the tools 1:1 (`agmem store -k api -k auth --kind research "..."`); `--output json` default on non-TTY.
-SDK: the official `modelcontextprotocol/go-sdk` (stdio transport) — `mark3labs/mcp-go` is the fallback if the official one disappoints.
-
-Search semantics: FTS5 ranked match over content+keywords, filters compose (AND), superseded excluded unless `--all`, results carry id/kind/keywords/date/node-path/snippet.
+MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keywords[], ttl_hours?, supersedes?, source)` · `search_memory(query?, keywords[]?, kind?, since?/until?, limit, all?)` · `get_memory(id)` · `rate_memory(id, up|down)` · `recall(keywords[], budget)` · plus CLI-only `agmem prompt`, `agmem tui`, `agmem serve`.
 
 ## MVP → later
 
-**MVP:** `Memory` + `Node` aggregates · FTS5 search with all filters · supersede semantics · MCP server (tools above) · CLI · multi-process-safe storage. **Proof of done:** an agent session stores research via MCP, a *different* harness finds it via CLI.
-**Later:** TUI browser · stats/timeline views · retention & dedup policies · `SummarizerGateway` consolidation · export/import (markdown dump) · embeddings via sqlite-vec behind the same reader port.
-**Non-goals:** being a vector DB, multi-user/server deployment, harness-specific integrations beyond MCP + CLI.
+**MVP (local):** `Memory` aggregate with summary/ttl/rating fields · FTS5 ranked search with all filters · supersede · `store/search/get/rate/recall` over MCP + CLI · `agmem prompt`. **Proof of done:** an agent stores research via MCP; a different harness finds it via CLI, ranked sensibly.
+**Phase 2:** TUI (browse, review-candidates view, human edits) · stats/timeline.
+**Phase 3:** hosted mode (`serve`, API keys, remote facade for all faces).
+**Later:** retention/dedup policies · `SummarizerGateway` consolidation (optional LLM, never required) · export/import · sqlite-vec.
+**Non-goals:** vector DB ambitions, harness-specific integrations beyond MCP + CLI, auto-deletion without human review.
 
 ## Open questions
 
-1. Naming: `agmem` as the binary?
-2. Where does the `.db` live by default — `~/.local/share/agmem/memory.db` (one global memory) with `--db`/env override per project, or per-project files by default? Global-with-override is my proposal (the point is cross-session knowledge).
-3. Should `source` (who wrote it) be free-form text the caller provides, or a structured convention (`harness/model/session`)? Free-form string in MVP is my proposal.
-4. Kinds list above good enough to start? (They mirror the categories you named: research results, preferences, locations — plus fact/decision/reference.)
+1. **summary: required or optional?** Recommendation: **required** — it's cheap for the writer and it's what makes search results scannable; optional fields written by lazy agents stay empty.
+2. Rating mechanics: are implicit access counts wanted at all, or explicit votes only? (Proposal: both, explicit-dominant.)
+3. `recall` budget unit: characters (simple, model-agnostic) or approximate tokens? Proposal: characters.
+4. Default DB location: global `~/.local/share/agmem/memory.db` with `--db`/env override (proposal), or per-project files?
