@@ -32,8 +32,10 @@ type options struct {
 }
 
 // New builds the root command. runMCP is the mcp subcommand body (lives in
-// the composition root, since it owns the server lifecycle).
-func New(version string, connect Connect, runMCP func(ctx context.Context, svc memories.Service) error) *cobra.Command {
+// the composition root, since it owns the server lifecycle). extra hooks in
+// commands owned by other slices or the composition root (serve, keys,
+// spaces, tui) without this package importing them.
+func New(version string, connect Connect, runMCP func(ctx context.Context, svc memories.Service) error, extra ...*cobra.Command) *cobra.Command {
 	opts := &options{}
 
 	root := &cobra.Command{
@@ -66,6 +68,7 @@ func New(version string, connect Connect, runMCP func(ctx context.Context, svc m
 		promptCmd(),
 		mcpCmd(withService, runMCP),
 	)
+	root.AddCommand(extra...)
 	return root
 }
 

@@ -52,6 +52,6 @@ func main() {
 		return mcpadapter.Run(ctx, mcpadapter.NewServer(svc, version))
 	}
 
-	root := cli.New(version, connect, runMCP)
+	root := cli.New(version, connect, runMCP, serveCmd())
 	os.Exit(cli.Execute(root))
 }
