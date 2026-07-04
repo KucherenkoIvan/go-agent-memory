@@ -19,6 +19,7 @@ import (
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/cli"
 	grpcadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/grpc"
 	mcpadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/mcp"
+	tuiadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/tui"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/remotecfg"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/storage"
 )
@@ -85,6 +86,7 @@ func main() {
 		serveCmd(),
 		apikeyscli.NewKeysCmd(connectKeys),
 		apikeyscli.NewSpacesCmd(connectKeys, exportSpace),
+		tuiadapter.NewCmd(tuiadapter.Connect(connect), version),
 	)
 	os.Exit(cli.Execute(root))
 }

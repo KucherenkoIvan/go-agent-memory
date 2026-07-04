@@ -6,7 +6,7 @@ One binary, `agmem`, three faces:
 
 - **MCP server** — `agmem mcp` (stdio): `store_memory`, `search_memory`, `get_memory`, `rate_memory`, `recall` in any MCP-capable harness.
 - **CLI** — for agents that shell out: JSON output when piped, exit code 0/1 with machine-readable errors, never a prompt.
-- **TUI** — for humans (phase 2).
+- **TUI** — `agmem tui`, for humans: browse and live-search, read, rate, prune (delete is TUI-only — agents supersede), correct via a pre-filled supersede editor, review downvoted candidates (`R`), and manage the remote endpoint — all against local or hosted memory alike.
 
 ## Quick start
 
