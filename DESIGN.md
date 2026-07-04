@@ -55,7 +55,8 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 ## Storage decisions
 
 - **FTS5 via SQL triggers, not a projector** — the file is multi-process (MCP server + CLI one-shots), and in-process events can't index another process's writes. Consistency mechanics live in the storage layer when storage is shared.
-- **Multi-process local SQLite is explicitly allowed** — deliberate relaxation of the template's one-process rule (which guards service replicas); WAL + busy_timeout + short transactions + same-machine only.
+- **Multi-process local SQLite is the deployment model** — a harness-connected MCP server and CLI one-shots (any harness, any subagent) run concurrently against the global file. Safe because the kernel's sqlite client sets WAL + busy_timeout + `BEGIN IMMEDIATE` write transactions (kernel ≥ v0.11.1; immediate transactions eliminate the deferred-upgrade race, which silently *loses updates*, not just errors). Same machine only — never NFS.
+  *History: v2 of this design used a flock to enforce single-process instead; reversed once `agmem mcp` living in a harness config made the lock hold for entire sessions, blocking every CLI call meanwhile.*
 - Implicit access-count updates are fire-and-forget single-statement writes (no transactions on the read path).
 
 ## Remote mode (phase 3)

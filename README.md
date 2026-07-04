@@ -34,14 +34,14 @@ MCP config (any harness):
 ## How it behaves
 
 - **The memory is global by default**: `~/.local/share/agmem/memory.db`, overridable with `AGMEM_DB`. Cross-session knowledge is the point.
-- **One process at a time**: a flock on `<db>.lock` guards the file (SQLite single-process discipline). While `agmem mcp` is running, CLI calls fail fast with the owner PID; the lock releases automatically if the process dies.
+- **Concurrent by design**: a harness-connected `agmem mcp` server and CLI calls (yours, subagents', other harnesses') safely share the file — WAL + immediate write transactions underneath. Same machine only; never put the file on NFS.
 - **Agents never edit** — corrections supersede (the old memory keeps existing, drops out of default search, `--all` shows everything). Expiring facts take `--ttl <hours>`.
 - **Ranking** = text relevance (FTS5) ⊕ explicit ratings (dominant) ⊕ recency ⊕ access counts. Rate what you use; future agents benefit.
 - **Summaries are required**: search returns summaries, `get` returns bodies — retrieval stays cheap to scan.
 
 ## Architecture
 
-Built on [go-kernel](https://github.com/KucherenkoIvan/go-kernel) (DDD + hexagonal, from the [tinycore template](https://github.com/KucherenkoIvan/go-tinycore-template)): the `Memory` aggregate owns the invariants, MCP/CLI are thin transport adapters over one `Service` facade — designed so a hosted mode (gRPC + API keys, phase 3) slots in behind the same facade. Two documented deviations: FTS5 is maintained by SQL triggers (the file is used by multiple processes over time; in-process events can't index foreign writes) and the process lock. See [DESIGN.md](DESIGN.md) for the full design and phases.
+Built on [go-kernel](https://github.com/KucherenkoIvan/go-kernel) (DDD + hexagonal, from the [tinycore template](https://github.com/KucherenkoIvan/go-tinycore-template)): the `Memory` aggregate owns the invariants, MCP/CLI are thin transport adapters over one `Service` facade — designed so a hosted mode (gRPC + API keys, phase 3) slots in behind the same facade. One documented deviation: FTS5 is maintained by SQL triggers, because the file is shared by multiple processes and in-process events can't index foreign writes. See [DESIGN.md](DESIGN.md) for the full design and phases.
 
 ## License
 
