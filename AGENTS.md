@@ -2,7 +2,7 @@
 
 A single-binary service on [go-kernel](https://github.com/KucherenkoIvan/go-kernel). The kernel's [architecture docs](https://github.com/KucherenkoIvan/go-kernel/blob/master/docs/architecture/1-service-structure.md) and package guides are the source of truth — read them before restructuring anything.
 
-Everything named `changeme` is placeholder scaffolding: rename it into the first real feature (or copy it for a new one and delete it), including the migration and tests. Do not build on top of the placeholder names.
+Everything named `memories` is placeholder scaffolding: rename it into the first real feature (or copy it for a new one and delete it), including the migration and tests. Do not build on top of the placeholder names.
 
 ## Hard rules
 
@@ -16,7 +16,7 @@ Everything named `changeme` is placeholder scaffolding: rename it into the first
 2. **Invariants live in aggregate methods** — never duplicated in use-cases or handlers. Expected business failures are `ddd.DomainError` values; transports map them (`httpapi.WithErrorStatus` for non-400s).
 3. **Schema changes are migrations** in `internal/shared/infra/storage/migrations/` — numbered, up-only, never edited after commit.
 4. **There is no CI — you are the CI.** `make lint` and `make test` must pass before every commit. Tests use real components (`:memory:` sqlite, the channel publisher) — prefer them over mocks; port fakes are hand-written maps, not mock frameworks.
-5. **New feature checklist**: copy the `changeme/` layout (domain → ports → use-cases → adapters → `feature.go`), add its migration, define its gRPC contract (own proto — the changeme contract in the kernel is template scaffolding), wire routes/registration and domain-error mappings (`WithErrorStatus`/`WithErrorCode`) in `cmd/app/main.go`, register health checks for any new infra, add tests at domain and transport altitude.
+5. **New feature checklist**: copy the `memories/` layout (domain → ports → use-cases → adapters → `feature.go`), add its migration, define its gRPC contract (own proto — the memories contract in the kernel is template scaffolding), wire routes/registration and domain-error mappings (`WithErrorStatus`/`WithErrorCode`) in `cmd/app/main.go`, register health checks for any new infra, add tests at domain and transport altitude.
 
 ## Conventions
 

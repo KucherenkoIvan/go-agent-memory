@@ -1,0 +1,114 @@
+package managememories
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/KucherenkoIvan/go-kernel/ddd"
+
+	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
+	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
+)
+
+const (
+	defaultSearchLimit = 20
+	maxSearchLimit     = 200
+	recallSearchLimit  = 50
+	defaultRecallChars = 4000
+)
+
+// SearchQuery — ranked summaries; agents scan these, then Get what matters.
+type SearchQuery struct {
+	reader ports.MemoryReader
+}
+
+func NewSearchQuery(reader ports.MemoryReader) *SearchQuery {
+	return &SearchQuery{reader: reader}
+}
+
+func (q *SearchQuery) Execute(ctx context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
+	if filters.Limit <= 0 {
+		filters.Limit = defaultSearchLimit
+	}
+	filters.Limit = min(filters.Limit, maxSearchLimit)
+	filters.Keywords = domain.NormalizeKeywords(filters.Keywords)
+	return q.reader.Search(ctx, ddd.NoTransaction, filters)
+}
+
+// GetQuery — the full memory; reading bumps the implicit access signal.
+type GetQuery struct {
+	reader ports.MemoryReader
+}
+
+func NewGetQuery(reader ports.MemoryReader) *GetQuery {
+	return &GetQuery{reader: reader}
+}
+
+func (q *GetQuery) Execute(ctx context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error) {
+	model, err := q.reader.GetFull(ctx, ddd.NoTransaction, id, true)
+	if err != nil {
+		return nil, err
+	}
+	if model == nil {
+		return nil, &domain.MemoryNotFoundError{}
+	}
+	return model, nil
+}
+
+// RecallQuery — the one-call session bootstrap: top-ranked memories for the
+// keywords, assembled into a markdown block trimmed to a character budget.
+type RecallQuery struct {
+	reader ports.MemoryReader
+}
+
+func NewRecallQuery(reader ports.MemoryReader) *RecallQuery {
+	return &RecallQuery{reader: reader}
+}
+
+func (q *RecallQuery) Execute(ctx context.Context, keywords []string, budgetChars int) (string, error) {
+	if budgetChars <= 0 {
+		budgetChars = defaultRecallChars
+	}
+
+	results, err := q.reader.Search(ctx, ddd.NoTransaction, ports.SearchFilters{
+		Keywords: domain.NormalizeKeywords(keywords),
+		Limit:    recallSearchLimit,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Recalled memories (%s)\n\n", strings.Join(keywords, ", "))
+	included := 0
+
+	for _, result := range results {
+		full, err := q.reader.GetFull(ctx, ddd.NoTransaction, domain.MemoryID(result.ID), true)
+		if err != nil {
+			return "", err
+		}
+		if full == nil {
+			continue
+		}
+
+		entry := fmt.Sprintf("## [%s] %s\n_id: %s · %s · keywords: %s_\n\n%s\n\n",
+			full.Kind, full.Summary, full.ID,
+			full.CreatedAt.Format("2006-01-02"), strings.Join(full.Keywords, ", "),
+			full.Content)
+
+		if b.Len()+len(entry) > budgetChars && included > 0 {
+			break
+		}
+		b.WriteString(entry)
+		included++
+		if b.Len() >= budgetChars {
+			break
+		}
+	}
+
+	if included == 0 {
+		return fmt.Sprintf("# Recalled memories (%s)\n\nNothing stored for these keywords yet.\n", strings.Join(keywords, ", ")), nil
+	}
+	return b.String(), nil
+}
