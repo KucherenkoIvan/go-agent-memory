@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/usecases/managememories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
+	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/cliout"
 )
 
 // Connect is provided by the composition root: it opens the backend (local
@@ -234,24 +234,7 @@ func Execute(root *cobra.Command) int {
 }
 
 func emit(cmd *cobra.Command, opts *options, jsonValue any, text string) error {
-	if jsonOutput(opts.output) {
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(jsonValue)
-	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), text)
-	return nil
-}
-
-func jsonOutput(mode string) bool {
-	switch mode {
-	case "json":
-		return true
-	case "text":
-		return false
-	default: // auto: machines get JSON, humans get text
-		return !term.IsTerminal(int(os.Stdout.Fd()))
-	}
+	return cliout.Emit(cmd.OutOrStdout(), opts.output, jsonValue, text)
 }
 
 func formatResults(results []domain.SearchResult) string {
