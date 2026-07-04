@@ -3,7 +3,7 @@ module github.com/KucherenkoIvan/go-agent-memory
 go 1.25.0
 
 require (
-	github.com/KucherenkoIvan/go-kernel v0.11.1
+	github.com/KucherenkoIvan/go-kernel v0.12.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.44.0
