@@ -102,7 +102,6 @@ func main() {
 		apikeyscli.NewKeysCmd(connectKeys),
 		apikeyscli.NewSpacesCmd(connectKeys, exportSpace),
 		tuiadapter.NewCmd(tuiadapter.Connect(connect), version),
-		updateCmd(version),
 		versionCmd(version),
 	)
 	os.Exit(cli.Execute(root))

@@ -8,6 +8,14 @@ import (
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/cliout"
 )
 
+// outputMode reads the root --output persistent flag when present.
+func outputMode(cmd *cobra.Command) string {
+	if f := cmd.Flag("output"); f != nil {
+		return f.Value.String()
+	}
+	return "auto"
+}
+
 // versionCmd reports what binary this is: the resolved version plus the
 // VCS revision Go embedded, when available. (`recall --version` prints the
 // short form; this one is the machine-readable face.)
