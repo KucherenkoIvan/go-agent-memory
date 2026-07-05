@@ -24,8 +24,8 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 		Title:   "Recall — agent memory",
 		Version: version,
 	}, &sdk.ServerOptions{
-		Instructions: `Persistent memory shared across sessions, models, and harnesses. Use it on your own initiative — nobody will prompt you to:
-- at session start, call pack with your task's topic keywords to recall what past agents learned;
+		Instructions: `Persistent memory shared across sessions, models, and harnesses. You may be asked to use it explicitly, but you do not need to be — using it on your own initiative is expected:
+- call pack with topic keywords when there is reason to believe past work touched this or a related problem (the project is familiar, recent changes led to the current task, the issue sounds recurrent) — not reflexively on every task, that would pull irrelevant context in;
 - when you rely on a memory, rate it afterwards — ratings drive ranking for everyone;
 - when you learn something worth keeping (a finding, a decision and its why, a preference, a location), store it before finishing.
 Store small, atomic memories: one fact per memory, with sharp keywords. Search and ranking are good — many small notes beat one big document. Search before storing to avoid duplicates; correct with supersedes, never re-store.`,
@@ -53,7 +53,7 @@ Store small, atomic memories: one fact per memory, with sharp keywords. Search a
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "pack",
-		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Call this unprompted at the start of any task. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
+		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Call this on your own when past work plausibly touched the same or a related problem — a familiar project, recent changes leading to the current task, a recurrent-sounding issue. Skip it when the task is clearly fresh ground; a reflexive pack pulls irrelevant context in. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
 	}, packHandler(svc))
 
 	return server
