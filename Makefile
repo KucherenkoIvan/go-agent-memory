@@ -7,8 +7,8 @@ GOBIN := $(shell go env GOPATH)/bin
 help: ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 
-build: ## static binary into bin/
-	CGO_ENABLED=0 go build -o bin/recall ./cmd/recall
+build: ## static binary into bin/ (version-stamped from git describe)
+	CGO_ENABLED=0 go build -ldflags "-X main.version=$$(git describe --tags --always)" -o bin/recall ./cmd/recall
 
 test: ## all tests (no docker — sqlite is in-memory)
 	go test ./...

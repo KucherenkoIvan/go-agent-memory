@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	"github.com/KucherenkoIvan/go-kernel/events"
 	"github.com/KucherenkoIvan/go-kernel/grpckit"
@@ -24,12 +25,26 @@ import (
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/storage"
 )
 
-var version = "dev" // set via -ldflags at release time
+var version = "dev" // set via -ldflags; go-install builds resolve from build info
+
+// resolveVersion prefers the ldflags stamp, falling back to the module
+// version Go embeds when the binary was installed via `go install @tag`.
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
 
 func main() {
 	// stdout belongs to command output (and to MCP's stdio transport!) —
 	// logs would corrupt both
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	version := resolveVersion()
 
 	connect := func(ctx context.Context) (memories.Service, func(), error) {
 		// remote mode: one config file flips every face to the hosted memory
@@ -87,6 +102,7 @@ func main() {
 		apikeyscli.NewKeysCmd(connectKeys),
 		apikeyscli.NewSpacesCmd(connectKeys, exportSpace),
 		tuiadapter.NewCmd(tuiadapter.Connect(connect), version),
+		updateCmd(version),
 	)
 	os.Exit(cli.Execute(root))
 }
