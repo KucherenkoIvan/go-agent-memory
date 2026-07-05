@@ -166,6 +166,7 @@ func rateHandler(svc memories.Service) sdk.ToolHandlerFor[rateIn, rateOut] {
 
 type packIn struct {
 	Keywords    []string `json:"keywords" jsonschema:"any may match (OR); more matches rank higher"`
+	Text        string   `json:"text,omitempty" jsonschema:"optional full-text query narrowing the keyword results"`
 	BudgetChars int      `json:"budgetChars,omitempty" jsonschema:"max characters, default 4000"`
 }
 
@@ -175,7 +176,7 @@ type packOut struct {
 
 func packHandler(svc memories.Service) sdk.ToolHandlerFor[packIn, packOut] {
 	return func(ctx context.Context, _ *sdk.CallToolRequest, in packIn) (*sdk.CallToolResult, packOut, error) {
-		pack, err := svc.Recall(ctx, in.Keywords, in.BudgetChars)
+		pack, err := svc.Recall(ctx, in.Keywords, in.Text, in.BudgetChars)
 		if err != nil {
 			return nil, packOut{}, err
 		}

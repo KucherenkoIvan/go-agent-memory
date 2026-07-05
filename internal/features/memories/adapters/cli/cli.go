@@ -23,7 +23,7 @@ import (
 )
 
 // Connect is provided by the composition root: it opens the backend (local
-// file today, remote later) and returns the facade plus a cleanup.
+// file or remote client) and returns the facade plus a cleanup.
 type Connect func(ctx context.Context) (memories.Service, func(), error)
 
 type options struct {
@@ -31,11 +31,9 @@ type options struct {
 	source string
 }
 
-// New builds the root command. runMCP is the mcp subcommand body (lives in
-// the composition root, since it owns the server lifecycle). extra hooks in
-// commands owned by other slices or the composition root (serve, keys,
-// spaces, tui) without this package importing them.
-func New(version string, connect Connect, runMCP func(ctx context.Context, svc memories.Service) error, extra ...*cobra.Command) *cobra.Command {
+// New builds the root command: the `memory` block, prompt, remote, and
+// whatever the composition root hooks in via extra (run, server).
+func New(version string, connect Connect, extra ...*cobra.Command) *cobra.Command {
 	opts := &options{}
 
 	root := &cobra.Command{
@@ -47,6 +45,10 @@ func New(version string, connect Connect, runMCP func(ctx context.Context, svc m
 	}
 	root.PersistentFlags().StringVar(&opts.output, "output", "auto", "output format: auto|json|text")
 	root.PersistentFlags().StringVar(&opts.source, "source", "cli", "who is writing (harness/model/session)")
+
+	// -v prints the version; completion works but stays out of the listing.
+	root.Flags().BoolP("version", "v", false, "print version information")
+	root.CompletionOptions.HiddenDefaultCmd = true
 
 	withService := func(run func(cmd *cobra.Command, args []string, svc memories.Service) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
@@ -60,17 +62,40 @@ func New(version string, connect Connect, runMCP func(ctx context.Context, svc m
 	}
 
 	root.AddCommand(
+		memoryCmd(opts, withService),
+		promptCmd(),
+		remoteCmd(opts),
+	)
+	root.AddCommand(extra...)
+
+	// `recall help x` keeps working, but the listing shows only real
+	// commands: cobra's default template force-includes help by name, so
+	// strip that special case (a cobra rewording makes this a no-op).
+	root.SetUsageTemplate(strings.Replace(root.UsageTemplate(),
+		`(or .IsAvailableCommand (eq .Name "help"))`, ".IsAvailableCommand", 1))
+	root.InitDefaultHelpCmd()
+	for _, sub := range root.Commands() {
+		if sub.Name() == "help" {
+			sub.Hidden = true
+		}
+	}
+	return root
+}
+
+// memoryCmd groups everything that touches memories themselves.
+func memoryCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "memory",
+		Short: "Store, search, read, rate, and pack memories",
+	}
+	cmd.AddCommand(
 		storeCmd(opts, withService),
 		searchCmd(opts, withService),
 		getCmd(opts, withService),
 		rateCmd(opts, withService),
 		packCmd(withService),
-		promptCmd(),
-		mcpCmd(withService, runMCP),
-		remoteCmd(opts),
 	)
-	root.AddCommand(extra...)
-	return root
+	return cmd
 }
 
 func storeCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
@@ -111,16 +136,26 @@ func storeCmd(opts *options, withService func(func(*cobra.Command, []string, mem
 
 func searchCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	var (
-		query, kind, since, until string
-		keywords                  []string
-		limit                     int
-		all                       bool
+		text, kind, since, until string
+		limit                    int
+		all, and                 bool
 	)
 	cmd := &cobra.Command{
-		Use:   "search",
-		Short: "Search memories — returns ranked summaries",
-		RunE: withService(func(cmd *cobra.Command, _ []string, svc memories.Service) error {
-			filters := ports.SearchFilters{Query: query, Keywords: keywords, Kind: kind, Limit: limit, IncludeDead: all}
+		Use:   "search [keyword]...",
+		Short: "Search memories — keywords OR-match and boost rank, like pack",
+		Long: `Search memories and print ranked summaries.
+
+Positional arguments are keywords: any may match, and every additional
+match boosts a memory's rank (the same semantics pack uses). --text
+layers a full-text query over the keyword results. No arguments at all
+returns the recent timeline.`,
+		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
+			filters := ports.SearchFilters{Query: text, Kind: kind, Limit: limit, IncludeDead: all}
+			if and {
+				filters.Keywords = args
+			} else {
+				filters.KeywordsAny = args
+			}
 			var err error
 			if filters.Since, err = parseTimeFlag(since); err != nil {
 				return err
@@ -135,8 +170,8 @@ func searchCmd(opts *options, withService func(func(*cobra.Command, []string, me
 			return emit(cmd, opts, map[string]any{"results": results}, formatResults(results))
 		}),
 	}
-	cmd.Flags().StringVarP(&query, "query", "q", "", "full-text query")
-	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword filter (repeatable, all must match)")
+	cmd.Flags().StringVar(&text, "text", "", "full-text query layered on the keyword results")
+	cmd.Flags().BoolVar(&and, "and", false, "require every keyword to match instead of any")
 	cmd.Flags().StringVar(&kind, "kind", "", "kind filter")
 	cmd.Flags().StringVar(&since, "since", "", "created after (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().StringVar(&until, "until", "", "created before (RFC3339 or YYYY-MM-DD)")
@@ -182,14 +217,25 @@ func rateCmd(opts *options, withService func(func(*cobra.Command, []string, memo
 
 func packCmd(withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	var (
-		keywords []string
-		budget   int
+		text   string
+		budget int
 	)
 	cmd := &cobra.Command{
-		Use:   "pack",
-		Short: "Assemble top-ranked memories into one context block (keywords OR-match)",
-		RunE: withService(func(cmd *cobra.Command, _ []string, svc memories.Service) error {
-			pack, err := svc.Recall(cmd.Context(), keywords, budget)
+		Use:   "pack <keyword>...",
+		Short: "Assemble top-ranked memories into one context block",
+		Long: `Assemble the top-ranked memories for the keywords into one markdown
+block within a character budget — the session bootstrap.
+
+Keywords OR-match: throw in every candidate topic; memories matching
+more of them rank higher. --text layers a full-text query on top.`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && text == "" {
+				return fmt.Errorf("give at least one keyword (or --text)")
+			}
+			return nil
+		},
+		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
+			pack, err := svc.Recall(cmd.Context(), args, text, budget)
 			if err != nil {
 				return err
 			}
@@ -197,9 +243,8 @@ func packCmd(withService func(func(*cobra.Command, []string, memories.Service) e
 			return nil
 		}),
 	}
-	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword (repeatable, any may match — more matches rank higher)")
+	cmd.Flags().StringVar(&text, "text", "", "full-text query layered on the keyword results")
 	cmd.Flags().IntVar(&budget, "budget", 0, "character budget (default 4000)")
-	_ = cmd.MarkFlagRequired("keyword")
 	return cmd
 }
 
@@ -211,16 +256,6 @@ func promptCmd() *cobra.Command {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), agentPrompt)
 			return nil
 		},
-	}
-}
-
-func mcpCmd(withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error, runMCP func(ctx context.Context, svc memories.Service) error) *cobra.Command {
-	return &cobra.Command{
-		Use:   "mcp",
-		Short: "Serve the memory as an MCP server over stdio",
-		RunE: withService(func(cmd *cobra.Command, _ []string, svc memories.Service) error {
-			return runMCP(cmd.Context(), svc)
-		}),
 	}
 }
 

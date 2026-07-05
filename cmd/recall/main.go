@@ -1,6 +1,6 @@
-// recall — harness-agnostic memory for AI agents. One binary, three faces:
-// CLI subcommands for shell-out agents, `recall mcp` for MCP harnesses, and
-// (phase 2) `recall tui` for humans.
+// recall — harness-agnostic memory for AI agents. One binary, three faces
+// behind `recall run`: MCP (default), gRPC server, and TUI; plus one-shot
+// CLI commands for shell-out agents and admins.
 package main
 
 import (
@@ -13,30 +13,48 @@ import (
 
 	"github.com/KucherenkoIvan/go-kernel/events"
 	"github.com/KucherenkoIvan/go-kernel/grpckit"
+	"github.com/spf13/cobra"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/apikeys"
 	apikeyscli "github.com/KucherenkoIvan/go-agent-memory/internal/features/apikeys/adapters/cli"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/cli"
 	grpcadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/grpc"
-	mcpadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/mcp"
-	tuiadapter "github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/adapters/tui"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/remotecfg"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/storage"
 )
 
 var version = "dev" // set via -ldflags; go-install builds resolve from build info
 
-// resolveVersion prefers the ldflags stamp, falling back to the module
-// version Go embeds when the binary was installed via `go install @tag`.
+// resolveVersion prefers the ldflags stamp, then the module version Go
+// embeds for `go install @tag` builds, and annotates with the VCS revision
+// when available.
 func resolveVersion() string {
-	if version != "dev" {
-		return version
+	v := version
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return v
 	}
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
+	if v == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		v = info.Main.Version
 	}
-	return version
+	revision, modified := "", false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+	if len(revision) >= 12 {
+		v += " (" + revision[:12]
+		if modified {
+			v += ", modified"
+		}
+		v += ")"
+	}
+	return v
 }
 
 func main() {
@@ -81,10 +99,6 @@ func main() {
 		return svc, cleanup, nil
 	}
 
-	runMCP := func(ctx context.Context, svc memories.Service) error {
-		return mcpadapter.Run(ctx, mcpadapter.NewServer(svc, version))
-	}
-
 	// server-admin commands work on the server data dir directly
 	connectKeys := func(ctx context.Context, dir string) (apikeys.Service, func(), error) {
 		store, err := storage.OpenServer(ctx, filepath.Join(dir, "keys.db"))
@@ -97,12 +111,18 @@ func main() {
 		return storage.ExportSnapshot(ctx, filepath.Join(dir, "spaces", space+".db"), dest)
 	}
 
-	root := cli.New(version, connect, runMCP,
-		serveCmd(),
+	serverCmd := &cobra.Command{
+		Use:   "server",
+		Short: "Administer a hosted memory server (keys, spaces)",
+	}
+	serverCmd.AddCommand(
 		apikeyscli.NewKeysCmd(connectKeys),
 		apikeyscli.NewSpacesCmd(connectKeys, exportSpace),
-		tuiadapter.NewCmd(tuiadapter.Connect(connect), version),
-		versionCmd(version),
+	)
+
+	root := cli.New(version, connect,
+		runCmd(version, connect),
+		serverCmd,
 	)
 	os.Exit(cli.Execute(root))
 }

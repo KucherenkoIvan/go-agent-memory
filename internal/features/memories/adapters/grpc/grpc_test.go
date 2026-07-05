@@ -112,7 +112,7 @@ func TestRemoteRoundtrip_SourceIsKeyName(t *testing.T) {
 	if err := client.Rate(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := client.Recall(ctx, []string{"project:recall"}, 0)
+	pack, err := client.Recall(ctx, []string{"project:recall"}, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

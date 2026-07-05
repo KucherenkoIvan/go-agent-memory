@@ -57,7 +57,7 @@ func (f *fakeService) Rate(_ context.Context, id domain.MemoryID, up bool) error
 	return nil
 }
 
-func (f *fakeService) Recall(context.Context, []string, int) (string, error) { return "", nil }
+func (f *fakeService) Recall(context.Context, []string, string, int) (string, error) { return "", nil }
 
 func (f *fakeService) Delete(_ context.Context, id domain.MemoryID) error {
 	f.deletes = append(f.deletes, string(id))

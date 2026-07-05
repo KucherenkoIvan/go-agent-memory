@@ -6,10 +6,10 @@ Local-first: the memory **is one `.db` file**, no daemon required. Optionally ho
 
 ## Faces
 
-- **MCP server** (`recall mcp`, stdio) — the flagship adapter: one config line in any MCP-capable harness.
-- **CLI** (`recall store|search|get|rate|recall ...`) — for harnesses that shell out: one-shot commands, stable JSON output, exit codes, no prompts.
-- **TUI** (`recall tui`) — the human face: browse, search, read, correct, prune.
-- **Server** (`recall serve`, phase 3) — gRPC hosting for shared/team memory; see Remote mode.
+- **MCP server** (`recall run`, stdio, the default face) — the flagship adapter: one config line in any MCP-capable harness.
+- **CLI** (`recall memory store|search|get|rate|pack ...`) — for harnesses that shell out: one-shot commands, stable JSON output, exit codes, no prompts. Search/pack keywords are positional and OR-match; `--text` layers FTS on top.
+- **TUI** (`recall run -t`) — the human face: browse, search, read, correct, prune.
+- **Server** (`recall run -s`) — gRPC hosting for shared/team memory, administered via `recall server keys|spaces`; see Remote mode.
 
 All faces sit on a small **application facade** with two implementations: *local* (in-process use-cases over the file) and *remote* (gRPC client) — so `--remote host:port --api-key ...` makes the same CLI/TUI/MCP talk to a hosted memory. This facade exists from day one even though remote ships later.
 
@@ -56,12 +56,12 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 
 - **FTS5 via SQL triggers, not a projector** — the file is multi-process (MCP server + CLI one-shots), and in-process events can't index another process's writes. Consistency mechanics live in the storage layer when storage is shared.
 - **Multi-process local SQLite is the deployment model** — a harness-connected MCP server and CLI one-shots (any harness, any subagent) run concurrently against the global file. Safe because the kernel's sqlite client sets WAL + busy_timeout + `BEGIN IMMEDIATE` write transactions (kernel ≥ v0.11.1; immediate transactions eliminate the deferred-upgrade race, which silently *loses updates*, not just errors). Same machine only — never NFS.
-  *History: v2 of this design used a flock to enforce single-process instead; reversed once `recall mcp` living in a harness config made the lock hold for entire sessions, blocking every CLI call meanwhile.*
+  *History: v2 of this design used a flock to enforce single-process instead; reversed once `recall run` (MCP) living in a harness config made the lock hold for entire sessions, blocking every CLI call meanwhile.*
 - Implicit access-count updates are fire-and-forget single-statement writes (no transactions on the read path).
 
 ## Remote mode (phase 3 — shipped)
 
-`recall serve` hosts shared memory over gRPC via the kernel (`grpckit` + `app.Run` + gRPC health + reflection). The contract lives in **go-kernel's `contracts/`** tree (`grpc/recall/v1`); recall imports the generated package.
+`recall run -s` hosts shared memory over gRPC via the kernel (`grpckit` + `app.Run` + gRPC health + reflection). The contract lives in **go-kernel's `contracts/`** tree (`grpc/recall/v1`); recall imports the generated package.
 
 **Tenancy: named spaces, N API keys per space.** A key (hashed at rest, `rcl_`-prefixed, checked by a `grpckit.WithUnaryInterceptor`) both authenticates and selects its space; the key's name becomes `source`, so shared memory attributes writers automatically. Revoking one teammate's key never rotates the others.
 
@@ -71,13 +71,13 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 
 ## Surfaces (sketch)
 
-MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keywords[], ttl_hours?, supersedes?, source)` · `search_memory(query?, keywords[]?, kind?, since?/until?, limit, all?)` · `get_memory(id)` · `rate_memory(id, up|down)` · `pack(keywords[], budget)` · plus CLI-only `recall prompt`, `recall tui`, `recall serve`.
+MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keywords[], ttl_hours?, supersedes?, source)` · `search_memory(query?, keywords[]?, kind?, since?/until?, limit, all?)` · `get_memory(id)` · `rate_memory(id, up|down)` · `pack(keywords[], budget)` · plus CLI-only `recall prompt`, `recall run [-m|-s|-t]`, and the `recall server keys|spaces` admin block.
 
 ## MVP → later
 
 **MVP (local):** `Memory` aggregate with summary/ttl/rating fields · FTS5 ranked search with all filters · supersede · `store/search/get/rate/recall` over MCP + CLI · `recall prompt`. **Proof of done:** an agent stores research via MCP; a different harness finds it via CLI, ranked sensibly.
 **Phase 2:** TUI (browse, review-candidates view, human edits) · stats/timeline.
-**Phase 3:** hosted mode (`serve`, API keys, remote facade for all faces).
+**Phase 3:** hosted mode (`run -s`, API keys, remote facade for all faces).
 **Later:** retention/dedup policies · `SummarizerGateway` consolidation (optional LLM, never required) · export/import · sqlite-vec.
 **Non-goals:** vector DB ambitions, harness-specific integrations beyond MCP + CLI, auto-deletion without human review.
 

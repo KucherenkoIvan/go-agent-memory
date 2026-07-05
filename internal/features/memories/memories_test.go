@@ -269,7 +269,7 @@ func TestRecall_AssemblesWithinBudget(t *testing.T) {
 		}
 	}
 
-	pack, err := svc.Recall(ctx, []string{"recall-test"}, 600)
+	pack, err := svc.Recall(ctx, []string{"recall-test"}, "", 600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +280,7 @@ func TestRecall_AssemblesWithinBudget(t *testing.T) {
 		t.Fatalf("budget exceeded: %d chars", len(pack))
 	}
 
-	empty, _ := svc.Recall(ctx, []string{"nothing-here"}, 600)
+	empty, _ := svc.Recall(ctx, []string{"nothing-here"}, "", 600)
 	if !strings.Contains(empty, "Nothing stored") {
 		t.Fatalf("empty recall: %q", empty)
 	}
@@ -304,7 +304,7 @@ func TestRecall_KeywordsORMatch_MoreMatchesRankHigher(t *testing.T) {
 	})
 
 	// any keyword qualifies — unknown ones don't empty the result
-	pack, err := svc.Recall(ctx, []string{"go", "project:app", "no-such-topic"}, 4000)
+	pack, err := svc.Recall(ctx, []string{"go", "project:app", "no-such-topic"}, "", 4000)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,7 +23,10 @@ type Service interface {
 	Search(ctx context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error)
 	Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error)
 	Rate(ctx context.Context, id domain.MemoryID, up bool) error
-	Recall(ctx context.Context, keywords []string, budgetChars int) (string, error)
+	// Recall assembles the top-ranked memories for the keywords (any may
+	// match; more matches rank higher) into one context block. text
+	// optionally narrows with a full-text query on top.
+	Recall(ctx context.Context, keywords []string, text string, budgetChars int) (string, error)
 	// Delete hard-prunes a memory. Human faces only (TUI) — never exposed
 	// to agents via MCP; agents correct with supersede instead.
 	Delete(ctx context.Context, id domain.MemoryID) error
@@ -71,8 +74,8 @@ func (s *localService) Rate(ctx context.Context, id domain.MemoryID, up bool) er
 	return s.rate.Execute(ctx, id, up)
 }
 
-func (s *localService) Recall(ctx context.Context, keywords []string, budgetChars int) (string, error) {
-	return s.recall.Execute(ctx, keywords, budgetChars)
+func (s *localService) Recall(ctx context.Context, keywords []string, text string, budgetChars int) (string, error) {
+	return s.recall.Execute(ctx, keywords, text, budgetChars)
 }
 
 func (s *localService) Delete(ctx context.Context, id domain.MemoryID) error {

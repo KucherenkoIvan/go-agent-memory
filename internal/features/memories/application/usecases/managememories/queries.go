@@ -33,6 +33,7 @@ func (q *SearchQuery) Execute(ctx context.Context, filters ports.SearchFilters) 
 	}
 	filters.Limit = min(filters.Limit, maxSearchLimit)
 	filters.Keywords = domain.NormalizeKeywords(filters.Keywords)
+	filters.KeywordsAny = domain.NormalizeKeywords(filters.KeywordsAny)
 	return q.reader.Search(ctx, ddd.NoTransaction, filters)
 }
 
@@ -66,14 +67,16 @@ func NewRecallQuery(reader ports.MemoryReader) *RecallQuery {
 	return &RecallQuery{reader: reader}
 }
 
-func (q *RecallQuery) Execute(ctx context.Context, keywords []string, budgetChars int) (string, error) {
+func (q *RecallQuery) Execute(ctx context.Context, keywords []string, text string, budgetChars int) (string, error) {
 	if budgetChars <= 0 {
 		budgetChars = defaultRecallChars
 	}
 
 	// OR semantics on purpose: session bootstrap throws candidate keywords
-	// at the store — any match qualifies, more matches rank higher.
+	// at the store — any match qualifies, more matches rank higher. An
+	// optional full-text query narrows on top.
 	results, err := q.reader.Search(ctx, ddd.NoTransaction, ports.SearchFilters{
+		Query:       text,
 		KeywordsAny: domain.NormalizeKeywords(keywords),
 		Limit:       recallSearchLimit,
 	})

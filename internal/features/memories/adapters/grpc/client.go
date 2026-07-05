@@ -95,9 +95,10 @@ func (c *Client) Rate(ctx context.Context, id domain.MemoryID, up bool) error {
 	return mapRemoteError(err)
 }
 
-func (c *Client) Recall(ctx context.Context, keywords []string, budgetChars int) (string, error) {
+func (c *Client) Recall(ctx context.Context, keywords []string, text string, budgetChars int) (string, error) {
 	resp, err := c.rpc.Recall(c.auth(ctx), &recallv1.RecallRequest{
 		Keywords:    keywords,
+		Text:        text,
 		BudgetChars: int32(budgetChars), //nolint:gosec // use-case defaults budget
 	})
 	if err != nil {

@@ -136,7 +136,7 @@ func (h *Handler) Recall(ctx context.Context, req *recallv1.RecallRequest) (*rec
 	if err != nil {
 		return nil, err
 	}
-	pack, err := svc.Recall(ctx, req.GetKeywords(), int(req.GetBudgetChars()))
+	pack, err := svc.Recall(ctx, req.GetKeywords(), req.GetText(), int(req.GetBudgetChars()))
 	if err != nil {
 		return nil, err
 	}

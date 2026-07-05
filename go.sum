@@ -1,5 +1,7 @@
 github.com/KucherenkoIvan/go-kernel v0.13.0 h1:D/we/fq9EHK02qiQ53bOhlax4ZUVwDLZUxqvCJiRsWw=
 github.com/KucherenkoIvan/go-kernel v0.13.0/go.mod h1:SAZ/FjI4Dho77kZEeZ9l116GAulbypzjEWkeDc18afM=
+github.com/KucherenkoIvan/go-kernel v0.13.1 h1:2zZFN88yBmLm8RrK6LueYE8rngowfOaKUOEIbqXm0rI=
+github.com/KucherenkoIvan/go-kernel v0.13.1/go.mod h1:SAZ/FjI4Dho77kZEeZ9l116GAulbypzjEWkeDc18afM=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
 github.com/MakeNowJust/heredoc v1.0.0/go.mod h1:mG5amYoWBHf8vpLOuehzbGGw0EHxpZZ6lCpQ4fNJ8LE=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
