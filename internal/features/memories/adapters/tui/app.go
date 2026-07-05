@@ -70,7 +70,7 @@ func (a *App) issueSearch() tea.Cmd {
 	}
 	a.list.seq++
 	a.inFlight++
-	return searchCmd(a.ctx, a.svc, a.list.seq, a.list.filters())
+	return searchCmd(a.ctx, a.svc, a.list.seq, a.list.spec())
 }
 
 func (a *App) settle() { a.inFlight = max(0, a.inFlight-1) }
@@ -107,7 +107,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil // superseded by newer typing
 		}
 		a.inFlight++
-		return a, searchCmd(a.ctx, a.svc, msg.seq, a.list.filters())
+		return a, searchCmd(a.ctx, a.svc, msg.seq, a.list.spec())
 
 	case searchDoneMsg:
 		a.settle()

@@ -7,7 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories"
-	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/usecases/managememories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 )
@@ -18,9 +17,9 @@ func debounceCmd(seq int) tea.Cmd {
 	return tea.Tick(debounceDelay, func(time.Time) tea.Msg { return debounceMsg{seq: seq} })
 }
 
-func searchCmd(ctx context.Context, svc memories.Service, seq int, f ports.SearchFilters) tea.Cmd {
+func searchCmd(ctx context.Context, svc memories.Service, seq int, spec searchSpec) tea.Cmd {
 	return func() tea.Msg {
-		results, err := svc.Search(ctx, f)
+		results, err := runSearch(ctx, svc, spec)
 		if err != nil {
 			return errMsg{op: "search", err: err}
 		}

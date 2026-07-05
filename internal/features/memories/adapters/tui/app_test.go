@@ -108,11 +108,19 @@ func TestSearch_DebounceDropsStaleSeq(t *testing.T) {
 		t.Fatal("fresh debounce must search")
 	}
 	drain(t, app, cmd)
-	if len(fake.searches) != baseline+1 {
-		t.Fatalf("exactly one search after debounce, got %d", len(fake.searches)-baseline)
+	// one debounce = one layered query: keywords, text, wide fuzzy pool
+	if len(fake.searches) != baseline+3 {
+		t.Fatalf("layered search must issue 3 fetches, got %d", len(fake.searches)-baseline)
 	}
-	if got := fake.searches[len(fake.searches)-1].Query; got != "ab" {
-		t.Fatalf("searched %q, want ab", got)
+	issued := fake.searches[baseline:]
+	if len(issued[0].KeywordsAny) != 1 || issued[0].KeywordsAny[0] != "ab" {
+		t.Fatalf("keyword layer: %+v", issued[0])
+	}
+	if issued[1].Query != "ab" {
+		t.Fatalf("text layer: %+v", issued[1])
+	}
+	if issued[2].Query != "" || issued[2].Limit != widePoolLimit {
+		t.Fatalf("fuzzy pool layer: %+v", issued[2])
 	}
 }
 
@@ -222,7 +230,7 @@ func TestReviewPreset_FiltersNetNegative(t *testing.T) {
 	if len(items) != 1 || items[0].(resultItem).r.ID != "bad" {
 		t.Fatalf("review preset: %+v", items)
 	}
-	if got := fake.searches[len(fake.searches)-1].Limit; got != reviewFetchLimit {
+	if got := fake.searches[len(fake.searches)-1].Limit; got != widePoolLimit {
 		t.Fatalf("review must fetch wide: limit=%d", got)
 	}
 }

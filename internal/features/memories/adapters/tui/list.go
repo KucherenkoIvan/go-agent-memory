@@ -11,30 +11,29 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 )
-
-const reviewFetchLimit = 200
 
 type resultItem struct{ r domain.SearchResult }
 
 func (resultItem) FilterValue() string { return "" } // search is server-side
 
-// listModel is home: search box + ranked results.
+// listModel is home: one search box (terms hit keywords, text, and fuzzy at
+// once) over the ranked results.
 type listModel struct {
 	st      *styles
 	search  textinput.Model
 	results list.Model
 	// seq marks the latest issued query; older responses are dropped
 	seq         int
+	kind        string // "" = all kinds; cycled with f
 	review      bool
 	includeDead bool
 }
 
 func newListModel(st *styles) listModel {
 	search := textinput.New()
-	search.Placeholder = "search — free text, k:<keyword>, kind:<kind>"
+	search.Placeholder = "search — terms match keywords, text, and fuzzy"
 	search.Prompt = "/ "
 
 	l := list.New(nil, itemDelegate{st: st}, 0, 0)
@@ -46,15 +45,14 @@ func newListModel(st *styles) listModel {
 	return listModel{st: st, search: search, results: l}
 }
 
-// filters builds the effective query from the single source of truth: the
-// search box text plus the two toggles.
-func (m *listModel) filters() ports.SearchFilters {
-	f := ParseQuery(m.search.Value())
-	f.IncludeDead = m.includeDead
-	if m.review {
-		f.Limit = reviewFetchLimit
+// spec snapshots the screen state into a query.
+func (m *listModel) spec() searchSpec {
+	return searchSpec{
+		terms:       strings.Fields(m.search.Value()),
+		kind:        m.kind,
+		includeDead: m.includeDead,
+		review:      m.review,
 	}
-	return f
 }
 
 func (m *listModel) apply(results []domain.SearchResult) {
@@ -107,23 +105,10 @@ func (m *listModel) removeItem(id string) {
 	}
 }
 
-// cycleKind rotates the kind: token in the search text — text stays the
-// single source of truth for filters.
+// cycleKind rotates the kind filter: all → fact → … → reference → all.
 func (m *listModel) cycleKind() {
-	current := ParseQuery(m.search.Value()).Kind
 	ring := append([]string{""}, kindStrings()...)
-	next := ring[(slices.Index(ring, current)+1)%len(ring)]
-
-	fields := slices.DeleteFunc(strings.Fields(m.search.Value()), func(tok string) bool {
-		return strings.HasPrefix(tok, "kind:")
-	})
-	if next != "" {
-		fields = append(fields, "kind:"+next)
-	}
-	m.search.SetValue(strings.Join(fields, " "))
-	if m.search.Focused() {
-		m.search.CursorEnd()
-	}
+	m.kind = ring[(slices.Index(ring, m.kind)+1)%len(ring)]
 }
 
 func kindStrings() []string {
@@ -141,8 +126,8 @@ func (m *listModel) setSize(width, height int) {
 
 func (m *listModel) badges() string {
 	var parts []string
-	if f := ParseQuery(m.search.Value()); f.Kind != "" {
-		parts = append(parts, m.st.accent.Render("[kind:"+f.Kind+"]"))
+	if m.kind != "" {
+		parts = append(parts, m.st.kindBadge(m.kind))
 	}
 	if m.includeDead {
 		parts = append(parts, m.st.dim.Render("[+dead]"))
@@ -163,7 +148,8 @@ func (m *listModel) view() string {
 	return header + "\n" + m.results.View()
 }
 
-// itemDelegate renders a two-line entry: [kind] summary / metadata.
+// itemDelegate renders what humans scan by — kind, keywords, date — loud,
+// with the summary as small secondary text underneath.
 type itemDelegate struct{ st *styles }
 
 func (itemDelegate) Height() int  { return 2 }
@@ -178,20 +164,26 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 	}
 	r := item.r
 
-	cursor, style := "  ", d.st.dim
+	cursor, keywordStyle := "  ", d.st.title
 	if index == m.Index() {
-		cursor, style = d.st.selected.Render("> "), d.st.selected
+		cursor, keywordStyle = d.st.selected.Render("> "), d.st.selected
 	}
 
 	width := max(20, m.Width()-4)
-	first := fmt.Sprintf("%s %s", d.st.kindBadge(r.Kind), style.Render(ansi.Truncate(r.Summary, width, "…")))
-
-	meta := fmt.Sprintf("%s · %s · ↑%d ↓%d",
-		r.CreatedAt.Format("2006-01-02"), strings.Join(r.Keywords, ", "), r.VotesUp, r.VotesDown)
+	date := r.CreatedAt.Format("2006-01-02")
 	if r.ExpiresAt != nil {
-		meta += " · expires " + r.ExpiresAt.Format("2006-01-02")
+		date += " ⏳" + r.ExpiresAt.Format("2006-01-02")
 	}
-	second := "   " + d.st.dim.Render(ansi.Truncate(meta, width, "…"))
+	keywords := ansi.Truncate(strings.Join(r.Keywords, ", "),
+		max(8, width-len(date)-len(r.Kind)-6), "…")
+	first := fmt.Sprintf("%s %s  %s", d.st.kindBadge(r.Kind),
+		keywordStyle.Render(keywords), d.st.dim.Render(date))
+
+	secondary := r.Summary
+	if r.VotesUp > 0 || r.VotesDown > 0 {
+		secondary += fmt.Sprintf("  ↑%d ↓%d", r.VotesUp, r.VotesDown)
+	}
+	second := "   " + d.st.dim.Render(ansi.Truncate(secondary, width, "…"))
 
 	_, _ = fmt.Fprintf(w, "%s%s\n%s", cursor, first, second)
 }
