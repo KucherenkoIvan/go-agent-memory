@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	agmemv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/agmem/v1"
+	recallv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/recall/v1"
 	"github.com/KucherenkoIvan/go-kernel/events"
 	"github.com/KucherenkoIvan/go-kernel/grpckit"
 	"github.com/KucherenkoIvan/go-kernel/grpckit/grpckittest"
@@ -61,7 +61,7 @@ func setup(t *testing.T) (keys apikeys.Service, dial func(apiKey string) *grpcad
 		grpckit.WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
 		grpckit.WithUnaryInterceptor(grpcauth.UnaryInterceptor(keys)),
 	)
-	agmemv1.RegisterMemoryServiceServer(srv, grpcadapter.NewHandler(&mapResolver{t: t, spaces: map[string]memories.Service{}}))
+	recallv1.RegisterMemoryServiceServer(srv, grpcadapter.NewHandler(&mapResolver{t: t, spaces: map[string]memories.Service{}}))
 	conn := grpckittest.Serve(t, srv)
 
 	return keys, func(apiKey string) *grpcadapter.Client {
@@ -82,7 +82,7 @@ func TestRemoteRoundtrip_SourceIsKeyName(t *testing.T) {
 	// store claims source "cli" — the server must override with the key name
 	id, err := client.Store(ctx, managememories.StoreInput{
 		Content: "remote memories work end to end", Summary: "remote e2e",
-		Kind: "fact", Keywords: []string{"e2e", "project:agmem"}, Source: "cli",
+		Kind: "fact", Keywords: []string{"e2e", "project:recall"}, Source: "cli",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestRemoteRoundtrip_SourceIsKeyName(t *testing.T) {
 	if err := client.Rate(ctx, id, true); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := client.Recall(ctx, []string{"project:agmem"}, 0)
+	pack, err := client.Recall(ctx, []string{"project:recall"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,9 +149,9 @@ func TestRemoteValidation_TypedErrorsAcrossTheWire(t *testing.T) {
 func TestRemoteAuth_BadKeyIsFriendly(t *testing.T) {
 	_, dial := setup(t)
 
-	client := dial("agm_" + strings.Repeat("0", 64))
+	client := dial("rcl_" + strings.Repeat("0", 64))
 	_, err := client.Search(context.Background(), ports.SearchFilters{})
-	if err == nil || !strings.Contains(err.Error(), "agmem remote status") {
+	if err == nil || !strings.Contains(err.Error(), "recall remote status") {
 		t.Fatalf("bad key error must point at remote status: %v", err)
 	}
 }

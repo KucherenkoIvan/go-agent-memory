@@ -1,13 +1,13 @@
 // Package grpcadapter is the gRPC transport for the memories feature: the
 // server-side handler (hosted mode's face) and the client-side Service
-// implementation (what a remote-configured agmem runs on).
+// implementation (what a remote-configured recall runs on).
 package grpcadapter
 
 import (
 	"context"
 	"time"
 
-	agmemv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/agmem/v1"
+	recallv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/recall/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,7 +26,7 @@ type ServiceResolver interface {
 }
 
 type Handler struct {
-	agmemv1.UnimplementedMemoryServiceServer
+	recallv1.UnimplementedMemoryServiceServer
 	resolver ServiceResolver
 }
 
@@ -48,7 +48,7 @@ func (h *Handler) resolve(ctx context.Context) (memories.Service, identity.Ident
 	return svc, ident, nil
 }
 
-func (h *Handler) Store(ctx context.Context, req *agmemv1.StoreRequest) (*agmemv1.StoreResponse, error) {
+func (h *Handler) Store(ctx context.Context, req *recallv1.StoreRequest) (*recallv1.StoreResponse, error) {
 	svc, ident, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -66,10 +66,10 @@ func (h *Handler) Store(ctx context.Context, req *agmemv1.StoreRequest) (*agmemv
 	if err != nil {
 		return nil, err
 	}
-	return &agmemv1.StoreResponse{Id: string(id)}, nil
+	return &recallv1.StoreResponse{Id: string(id)}, nil
 }
 
-func (h *Handler) Search(ctx context.Context, req *agmemv1.SearchRequest) (*agmemv1.SearchResponse, error) {
+func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*recallv1.SearchResponse, error) {
 	svc, _, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -88,9 +88,9 @@ func (h *Handler) Search(ctx context.Context, req *agmemv1.SearchRequest) (*agme
 		return nil, err
 	}
 
-	out := make([]*agmemv1.SearchResult, 0, len(results))
+	out := make([]*recallv1.SearchResult, 0, len(results))
 	for _, r := range results {
-		out = append(out, &agmemv1.SearchResult{
+		out = append(out, &recallv1.SearchResult{
 			Id: r.ID, Summary: r.Summary, Kind: r.Kind, Keywords: r.Keywords,
 			Source: r.Source, CreatedAt: timestamppb.New(r.CreatedAt),
 			ExpiresAt: optionalTimestamp(r.ExpiresAt), Snippet: r.Snippet,
@@ -98,10 +98,10 @@ func (h *Handler) Search(ctx context.Context, req *agmemv1.SearchRequest) (*agme
 			AccessCount: int32(r.AccessCount), //nolint:gosec // access counts
 		})
 	}
-	return &agmemv1.SearchResponse{Results: out}, nil
+	return &recallv1.SearchResponse{Results: out}, nil
 }
 
-func (h *Handler) Get(ctx context.Context, req *agmemv1.GetRequest) (*agmemv1.GetResponse, error) {
+func (h *Handler) Get(ctx context.Context, req *recallv1.GetRequest) (*recallv1.GetResponse, error) {
 	svc, _, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (h *Handler) Get(ctx context.Context, req *agmemv1.GetRequest) (*agmemv1.Ge
 	if err != nil {
 		return nil, err
 	}
-	return &agmemv1.GetResponse{Memory: &agmemv1.Memory{
+	return &recallv1.GetResponse{Memory: &recallv1.Memory{
 		Id: model.ID, Content: model.Content, Summary: model.Summary,
 		Kind: model.Kind, Keywords: model.Keywords, Source: model.Source,
 		CreatedAt: timestamppb.New(model.CreatedAt), ExpiresAt: optionalTimestamp(model.ExpiresAt),
@@ -120,7 +120,7 @@ func (h *Handler) Get(ctx context.Context, req *agmemv1.GetRequest) (*agmemv1.Ge
 	}}, nil
 }
 
-func (h *Handler) Rate(ctx context.Context, req *agmemv1.RateRequest) (*agmemv1.RateResponse, error) {
+func (h *Handler) Rate(ctx context.Context, req *recallv1.RateRequest) (*recallv1.RateResponse, error) {
 	svc, _, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -128,10 +128,10 @@ func (h *Handler) Rate(ctx context.Context, req *agmemv1.RateRequest) (*agmemv1.
 	if err := svc.Rate(ctx, domain.MemoryID(req.GetId()), req.GetUp()); err != nil {
 		return nil, err
 	}
-	return &agmemv1.RateResponse{}, nil
+	return &recallv1.RateResponse{}, nil
 }
 
-func (h *Handler) Recall(ctx context.Context, req *agmemv1.RecallRequest) (*agmemv1.RecallResponse, error) {
+func (h *Handler) Recall(ctx context.Context, req *recallv1.RecallRequest) (*recallv1.RecallResponse, error) {
 	svc, _, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -140,10 +140,10 @@ func (h *Handler) Recall(ctx context.Context, req *agmemv1.RecallRequest) (*agme
 	if err != nil {
 		return nil, err
 	}
-	return &agmemv1.RecallResponse{Context: pack}, nil
+	return &recallv1.RecallResponse{Context: pack}, nil
 }
 
-func (h *Handler) Delete(ctx context.Context, req *agmemv1.DeleteRequest) (*agmemv1.DeleteResponse, error) {
+func (h *Handler) Delete(ctx context.Context, req *recallv1.DeleteRequest) (*recallv1.DeleteResponse, error) {
 	svc, _, err := h.resolve(ctx)
 	if err != nil {
 		return nil, err
@@ -151,7 +151,7 @@ func (h *Handler) Delete(ctx context.Context, req *agmemv1.DeleteRequest) (*agme
 	if err := svc.Delete(ctx, domain.MemoryID(req.GetId())); err != nil {
 		return nil, err
 	}
-	return &agmemv1.DeleteResponse{}, nil
+	return &recallv1.DeleteResponse{}, nil
 }
 
 func fromTimestamp(ts *timestamppb.Timestamp) time.Time {

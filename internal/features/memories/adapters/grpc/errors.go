@@ -45,7 +45,7 @@ func mapRemoteError(err error) error {
 	}
 
 	if st, ok := status.FromError(err); ok && st.Code() == codes.Unauthenticated {
-		return fmt.Errorf("remote memory rejected the API key — check `agmem remote status`: %s", st.Message())
+		return fmt.Errorf("remote memory rejected the API key — check `recall remote status`: %s", st.Message())
 	}
 	return err
 }

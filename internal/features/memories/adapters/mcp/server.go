@@ -20,8 +20,8 @@ const defaultSource = "mcp"
 // NewServer builds the MCP server with all memory tools registered.
 func NewServer(svc memories.Service, version string) *sdk.Server {
 	server := sdk.NewServer(&sdk.Implementation{
-		Name:    "agmem",
-		Title:   "Agent Memory",
+		Name:    "recall",
+		Title:   "Recall — agent memory",
 		Version: version,
 	}, nil)
 
@@ -46,9 +46,9 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 	}, rateHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
-		Name:        "recall",
+		Name:        "pack",
 		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
-	}, recallHandler(svc))
+	}, packHandler(svc))
 
 	return server
 }
@@ -158,22 +158,22 @@ func rateHandler(svc memories.Service) sdk.ToolHandlerFor[rateIn, rateOut] {
 	}
 }
 
-type recallIn struct {
+type packIn struct {
 	Keywords    []string `json:"keywords" jsonschema:"any may match (OR); more matches rank higher"`
 	BudgetChars int      `json:"budgetChars,omitempty" jsonschema:"max characters, default 4000"`
 }
 
-type recallOut struct {
+type packOut struct {
 	Context string `json:"context"`
 }
 
-func recallHandler(svc memories.Service) sdk.ToolHandlerFor[recallIn, recallOut] {
-	return func(ctx context.Context, _ *sdk.CallToolRequest, in recallIn) (*sdk.CallToolResult, recallOut, error) {
+func packHandler(svc memories.Service) sdk.ToolHandlerFor[packIn, packOut] {
+	return func(ctx context.Context, _ *sdk.CallToolRequest, in packIn) (*sdk.CallToolResult, packOut, error) {
 		pack, err := svc.Recall(ctx, in.Keywords, in.BudgetChars)
 		if err != nil {
-			return nil, recallOut{}, err
+			return nil, packOut{}, err
 		}
-		return nil, recallOut{Context: pack}, nil
+		return nil, packOut{Context: pack}, nil
 	}
 }
 

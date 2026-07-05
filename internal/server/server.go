@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/KucherenkoIvan/go-kernel/app"
-	agmemv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/agmem/v1"
+	recallv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/recall/v1"
 	"github.com/KucherenkoIvan/go-kernel/grpckit"
 	"github.com/KucherenkoIvan/go-kernel/health"
 	"google.golang.org/grpc/codes"
@@ -39,7 +39,7 @@ func Run(ctx context.Context, cfg Config) error {
 		grpckit.WithErrorCode("invalid_supersede", codes.InvalidArgument),
 		grpckit.WithUnaryInterceptor(grpcauth.UnaryInterceptor(keysSvc)),
 	)
-	agmemv1.RegisterMemoryServiceServer(srv, grpcadapter.NewHandler(registry))
+	recallv1.RegisterMemoryServiceServer(srv, grpcadapter.NewHandler(registry))
 	health.NewChecker(health.Check{Name: "keys-db", Check: keys.DB.Ping}).RegisterGRPC(srv)
 	reflection.Register(srv) // the contract explorer reaches us via reflection
 

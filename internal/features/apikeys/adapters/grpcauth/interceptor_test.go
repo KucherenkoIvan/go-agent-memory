@@ -48,7 +48,7 @@ func withAuth(token string) context.Context {
 
 func TestUnaryInterceptor(t *testing.T) {
 	interceptor, token := setup(t)
-	const method = "/grpc.agmem.v1.MemoryService/Search"
+	const method = "/grpc.recall.v1.MemoryService/Search"
 
 	// valid token → handler runs with identity in context
 	ident, err := call(interceptor, withAuth(token), method)
@@ -65,7 +65,7 @@ func TestUnaryInterceptor(t *testing.T) {
 		"no header":     metadata.NewIncomingContext(context.Background(), metadata.MD{}),
 		"not bearer":    metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", token)),
 		"empty bearer":  metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer ")),
-		"unknown token": withAuth("agm_deadbeef00000000000000000000000000000000000000000000000000000000"),
+		"unknown token": withAuth("rcl_deadbeef00000000000000000000000000000000000000000000000000000000"),
 	} {
 		_, err := call(interceptor, ctx, method)
 		st, ok := status.FromError(err)

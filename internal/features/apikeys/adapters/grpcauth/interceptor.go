@@ -19,7 +19,7 @@ import (
 // unauthenticated paths: liveness probes and the reflection-based explorer.
 var openPrefixes = []string{"/grpc.health.v1.Health/", "/grpc.reflection."}
 
-// UnaryInterceptor authenticates `authorization: Bearer agm_...` metadata.
+// UnaryInterceptor authenticates `authorization: Bearer rcl_...` metadata.
 // Every failure mode reads the same — callers never learn whether a token
 // is unknown, malformed, or revoked.
 func UnaryInterceptor(svc apikeys.Service) grpc.UnaryServerInterceptor {

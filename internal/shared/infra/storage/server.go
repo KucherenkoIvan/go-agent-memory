@@ -14,14 +14,14 @@ import (
 //go:embed servermigrations/*.sql
 var serverMigrationsFS embed.FS
 
-// DefaultServerDir is where a hosted agmem keeps its control plane
+// DefaultServerDir is where a hosted recall keeps its control plane
 // (keys.db) and the per-space memory files (spaces/<name>.db).
 func DefaultServerDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("storage: resolving home: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "agmem", "server"), nil
+	return filepath.Join(home, ".local", "share", "recall", "server"), nil
 }
 
 // OpenServer opens (creating if missing) the server control-plane database
@@ -54,7 +54,7 @@ func OpenServer(ctx context.Context, path string) (*Store, error) {
 // ExportSnapshot writes a consistent point-in-time copy of a database to
 // dest via VACUUM INTO — safe while other processes write under WAL. The
 // snapshot of a space file IS a local memory.db: hand it to a user and
-// they point AGMEM_DB at it. Fails if dest already exists (VACUUM INTO
+// they point RECALL_DB at it. Fails if dest already exists (VACUUM INTO
 // requirement).
 func ExportSnapshot(ctx context.Context, dbPath, dest string) error {
 	if _, err := os.Stat(dbPath); err != nil {

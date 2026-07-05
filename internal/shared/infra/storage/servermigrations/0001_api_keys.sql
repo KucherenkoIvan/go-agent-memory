@@ -12,7 +12,7 @@ CREATE TABLE api_keys (
   name       text NOT NULL,             -- key label; becomes memory `source`
   space      text NOT NULL REFERENCES spaces(name),
   token_hash text NOT NULL UNIQUE,      -- hex(sha256(raw token)); raw never stored
-  prefix     text NOT NULL,             -- display handle, e.g. agm_a1b2c3d4
+  prefix     text NOT NULL,             -- display handle, e.g. rcl_a1b2c3d4
   created_at text NOT NULL,
   revoked_at text                       -- NULL = active
 );

@@ -39,7 +39,7 @@ func New(version string, connect Connect, runMCP func(ctx context.Context, svc m
 	opts := &options{}
 
 	root := &cobra.Command{
-		Use:           "agmem",
+		Use:           "recall",
 		Short:         "Harness-agnostic memory for AI agents",
 		Version:       version,
 		SilenceUsage:  true,
@@ -64,7 +64,7 @@ func New(version string, connect Connect, runMCP func(ctx context.Context, svc m
 		searchCmd(opts, withService),
 		getCmd(opts, withService),
 		rateCmd(opts, withService),
-		recallCmd(withService),
+		packCmd(withService),
 		promptCmd(),
 		mcpCmd(withService, runMCP),
 		remoteCmd(opts),
@@ -180,13 +180,13 @@ func rateCmd(opts *options, withService func(func(*cobra.Command, []string, memo
 	}
 }
 
-func recallCmd(withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
+func packCmd(withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	var (
 		keywords []string
 		budget   int
 	)
 	cmd := &cobra.Command{
-		Use:   "recall",
+		Use:   "pack",
 		Short: "Assemble top-ranked memories into one context block (keywords OR-match)",
 		RunE: withService(func(cmd *cobra.Command, _ []string, svc memories.Service) error {
 			pack, err := svc.Recall(cmd.Context(), keywords, budget)

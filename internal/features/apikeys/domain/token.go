@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// TokenPrefix marks every agmem API key; clients validate it before dialing.
-const TokenPrefix = "agm_"
+// TokenPrefix marks every recall API key; clients validate it before dialing.
+const TokenPrefix = "rcl_"
 
 const displayPrefixLength = 12
 

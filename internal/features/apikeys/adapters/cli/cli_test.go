@@ -27,7 +27,7 @@ func run(t *testing.T, cmd *cobra.Command, args ...string) (string, error) {
 
 // withOutput mimics the root command's persistent --output flag.
 func withOutput(cmd *cobra.Command) *cobra.Command {
-	root := &cobra.Command{Use: "agmem", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{Use: "recall", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().String("output", "auto", "")
 	root.AddCommand(cmd)
 	return root
@@ -61,7 +61,7 @@ func TestKeysCLI_CreateListRevoke(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &created); err != nil {
 		t.Fatalf("create output not JSON: %v\n%s", err, out)
 	}
-	if !strings.HasPrefix(created.Key, "agm_") || created.Space != "team-x" {
+	if !strings.HasPrefix(created.Key, "rcl_") || created.Space != "team-x" {
 		t.Fatalf("create: %+v", created)
 	}
 

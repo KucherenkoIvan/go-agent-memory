@@ -8,9 +8,9 @@ import (
 
 // Config is hosted mode's knobs; env first, cobra flags override in cmd.
 type Config struct {
-	Addr string `env:"AGMEM_ADDR" default:":7846"`
+	Addr string `env:"RECALL_ADDR" default:":7846"`
 	// Dir holds keys.db and spaces/; empty resolves to the default below.
-	Dir string `env:"AGMEM_SERVER_DIR"`
+	Dir string `env:"RECALL_SERVER_DIR"`
 }
 
 func LoadConfig() (Config, error) {

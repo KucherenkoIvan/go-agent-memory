@@ -29,7 +29,7 @@ func TestKeyLifecycle_CreateAuthenticateRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(created.RawToken, "agm_") {
+	if !strings.HasPrefix(created.RawToken, "rcl_") {
 		t.Fatalf("raw token: %q", created.RawToken)
 	}
 	if created.Key.Space != "team-x" || created.Key.Name != "laptop-ivan" {
@@ -47,7 +47,7 @@ func TestKeyLifecycle_CreateAuthenticateRevoke(t *testing.T) {
 
 	// unknown tokens fail with the same error revoked ones will
 	var invalid *domain.InvalidAPIKeyError
-	if _, err := svc.Authenticate(ctx, "agm_"+strings.Repeat("0", 64)); !errors.As(err, &invalid) {
+	if _, err := svc.Authenticate(ctx, "rcl_"+strings.Repeat("0", 64)); !errors.As(err, &invalid) {
 		t.Fatalf("unknown token: %v", err)
 	}
 

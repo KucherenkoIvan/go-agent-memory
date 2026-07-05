@@ -22,7 +22,7 @@ const probeTimeout = 5 * time.Second
 func remoteCmd(opts *options) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "remote",
-		Short: "Attach this agmem to a hosted memory (or detach back to local)",
+		Short: "Attach this recall to a hosted memory (or detach back to local)",
 	}
 	root.AddCommand(remoteSetCmd(opts), remoteUnsetCmd(opts), remoteStatusCmd(opts))
 	return root
@@ -31,12 +31,12 @@ func remoteCmd(opts *options) *cobra.Command {
 func remoteSetCmd(opts *options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <addr> <api-key>",
-		Short: "Point this agmem at a hosted memory (verified before saving)",
+		Short: "Point this recall at a hosted memory (verified before saving)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			addr, key := args[0], args[1]
-			if !strings.HasPrefix(key, "agm_") {
-				return fmt.Errorf("api key must start with agm_ — got %q", mask(key))
+			if !strings.HasPrefix(key, "rcl_") {
+				return fmt.Errorf("api key must start with rcl_ — got %q", mask(key))
 			}
 
 			// fail fast on typos: reach the server AND authenticate

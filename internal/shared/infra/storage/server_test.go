@@ -24,7 +24,7 @@ func TestOpenServer_AppliesControlPlaneSchema(t *testing.T) {
 	}
 	if _, err := store.DB.DB().ExecContext(ctx, `
 		INSERT INTO api_keys (id, name, space, token_hash, prefix, created_at)
-		VALUES ('k1', 'laptop', 'team-x', 'hash', 'agm_a1b2c3d4', '2026-01-01T00:00:00Z')`); err != nil {
+		VALUES ('k1', 'laptop', 'team-x', 'hash', 'rcl_a1b2c3d4', '2026-01-01T00:00:00Z')`); err != nil {
 		t.Fatalf("api_keys table missing: %v", err)
 	}
 

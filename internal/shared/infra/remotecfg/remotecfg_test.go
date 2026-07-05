@@ -11,9 +11,9 @@ import (
 func testPath(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "sub", "remote.json")
-	t.Setenv("AGMEM_REMOTE_CONFIG", path)
-	t.Setenv("AGMEM_REMOTE_ADDR", "")
-	t.Setenv("AGMEM_API_KEY", "")
+	t.Setenv("RECALL_REMOTE_CONFIG", path)
+	t.Setenv("RECALL_REMOTE_ADDR", "")
+	t.Setenv("RECALL_API_KEY", "")
 	return path
 }
 
@@ -24,7 +24,7 @@ func TestSaveLoadRemove(t *testing.T) {
 		t.Fatalf("absent config: %v %v", cfg, err)
 	}
 
-	want := remotecfg.Config{Addr: "memory.example:7846", APIKey: "agm_secret"}
+	want := remotecfg.Config{Addr: "memory.example:7846", APIKey: "rcl_secret"}
 	if err := remotecfg.Save(want); err != nil {
 		t.Fatal(err)
 	}
@@ -61,28 +61,28 @@ func TestResolve_EnvOverridesFile(t *testing.T) {
 		t.Fatalf("empty resolve: %+v, %v", cfg, err)
 	}
 
-	_ = remotecfg.Save(remotecfg.Config{Addr: "file-addr:1", APIKey: "agm_file"})
+	_ = remotecfg.Save(remotecfg.Config{Addr: "file-addr:1", APIKey: "rcl_file"})
 
 	cfg, err := remotecfg.Resolve()
-	if err != nil || cfg.Addr != "file-addr:1" || cfg.APIKey != "agm_file" {
+	if err != nil || cfg.Addr != "file-addr:1" || cfg.APIKey != "rcl_file" {
 		t.Fatalf("file resolve: %+v, %v", cfg, err)
 	}
 
 	// env wins per-field
-	t.Setenv("AGMEM_REMOTE_ADDR", "env-addr:2")
+	t.Setenv("RECALL_REMOTE_ADDR", "env-addr:2")
 	cfg, err = remotecfg.Resolve()
-	if err != nil || cfg.Addr != "env-addr:2" || cfg.APIKey != "agm_file" {
+	if err != nil || cfg.Addr != "env-addr:2" || cfg.APIKey != "rcl_file" {
 		t.Fatalf("env-addr resolve: %+v, %v", cfg, err)
 	}
-	t.Setenv("AGMEM_API_KEY", "agm_env")
-	if cfg, _ = remotecfg.Resolve(); cfg.APIKey != "agm_env" {
+	t.Setenv("RECALL_API_KEY", "rcl_env")
+	if cfg, _ = remotecfg.Resolve(); cfg.APIKey != "rcl_env" {
 		t.Fatalf("env-key resolve: %+v", cfg)
 	}
 }
 
 func TestResolve_AddrWithoutKeyErrors(t *testing.T) {
 	testPath(t)
-	t.Setenv("AGMEM_REMOTE_ADDR", "somewhere:7846")
+	t.Setenv("RECALL_REMOTE_ADDR", "somewhere:7846")
 
 	if _, err := remotecfg.Resolve(); err == nil {
 		t.Fatal("addr without key must error, not silently fall back to local")

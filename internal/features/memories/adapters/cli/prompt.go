@@ -1,28 +1,28 @@
 package cli
 
-// agentPrompt is what `agmem prompt` prints — the usage contract to paste
+// agentPrompt is what `recall prompt` prints — the usage contract to paste
 // into a harness's AGENTS.md/CLAUDE.md. The system documents itself.
-const agentPrompt = `## Persistent memory (agmem)
+const agentPrompt = `## Persistent memory (recall)
 
-A shared memory survives across sessions, models, and harnesses. Use it via the ` + "`agmem`" + ` CLI (or the equivalent MCP tools if configured).
+A shared memory survives across sessions, models, and harnesses. Use it via the ` + "`recall`" + ` CLI (or the equivalent MCP tools if configured).
 
 **At session start** — recall what past agents learned about your task:
 
-    agmem recall -k <topic> -k <topic>       # ranked memories as one block
-    agmem search -q "<free text>" -k <topic> # or browse summaries first
+    recall pack -k <topic> -k <topic>         # ranked memories as one block
+    recall search -q "<free text>" -k <topic> # or browse summaries first
 
-Recall keywords OR-match: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. Search keywords AND-match: use them to narrow.
+Pack keywords OR-match: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. Search keywords AND-match: use them to narrow.
 
-If agmem returns nothing relevant, fall back to your harness's builtin memory (if you have one) — and store anything useful you find there into agmem so it is shared next time.
+If recall returns nothing relevant, fall back to your harness's builtin memory (if you have one) — and store anything useful you find there into recall so it is shared next time.
 
 **When you rely on a memory** — rate it afterwards; ratings drive ranking for future agents:
 
-    agmem rate <id> up      # it was correct and helped
-    agmem rate <id> down    # it was wrong or misleading
+    recall rate <id> up      # it was correct and helped
+    recall rate <id> down    # it was wrong or misleading
 
 **When you learn something worth keeping** (a research result, a decision and its why, a preference, a location of something), store it — but search first to avoid duplicates:
 
-    agmem store --summary "<one line>" --kind <fact|preference|research|decision|location|reference> \
+    recall store --summary "<one line>" --kind <fact|preference|research|decision|location|reference> \
       -k <topic> -k <topic> [--ttl <hours>] [--supersedes <id>] "<content>"
 
 Rules:

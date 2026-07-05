@@ -9,7 +9,7 @@ import (
 	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/storage"
 )
 
-// The deployment model: multiple agmem processes on one file. Two stores
+// The deployment model: multiple recall processes on one file. Two stores
 // open the same database concurrently and both write — WAL + immediate
 // transactions (kernel defaults) make this safe.
 func TestMultiProcessModel_ConcurrentStores(t *testing.T) {

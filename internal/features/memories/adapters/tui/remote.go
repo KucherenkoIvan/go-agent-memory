@@ -26,7 +26,7 @@ func newRemoteModel(st *styles, width int) *remoteModel {
 	addr.Placeholder = "host:7846"
 	key := textinput.New()
 	key.Prompt = ""
-	key.Placeholder = "agm_..."
+	key.Placeholder = "rcl_..."
 	key.EchoMode = textinput.EchoPassword
 
 	if cfg, err := remotecfg.Load(); err == nil && cfg != nil {

@@ -24,13 +24,13 @@ import (
 var migrationsFS embed.FS
 
 // DefaultPath is the global memory location: cross-session knowledge is the
-// point, so one file for everything unless overridden (AGMEM_DB).
+// point, so one file for everything unless overridden (RECALL_DB).
 func DefaultPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("storage: resolving home: %w", err)
 	}
-	return filepath.Join(home, ".local", "share", "agmem", "memory.db"), nil
+	return filepath.Join(home, ".local", "share", "recall", "memory.db"), nil
 }
 
 // Store is the opened database.
@@ -39,7 +39,7 @@ type Store struct {
 }
 
 // Open opens (creating if missing) the database and applies migrations.
-// Concurrent agmem processes are fine — migrations are the one racy moment,
+// Concurrent recall processes are fine — migrations are the one racy moment,
 // and they are idempotent (schema_migrations) and fast.
 func Open(ctx context.Context, path string) (*Store, error) {
 	if err := ensureDir(path); err != nil {

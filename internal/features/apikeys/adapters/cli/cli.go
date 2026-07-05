@@ -1,6 +1,6 @@
 // Package cli holds the server-admin commands: keys (create/list/revoke)
 // and spaces (list/export). They run against the server data dir directly —
-// safe while `agmem serve` is up, same WAL multi-process model as local.
+// safe while `recall serve` is up, same WAL multi-process model as local.
 package cli
 
 import (
@@ -24,12 +24,12 @@ type Connect func(ctx context.Context, dir string) (apikeys.Service, func(), err
 // Export snapshots one space's database to a destination path.
 type Export func(ctx context.Context, dir, space, dest string) error
 
-// resolveDir: --dir flag > AGMEM_SERVER_DIR > default.
+// resolveDir: --dir flag > RECALL_SERVER_DIR > default.
 func resolveDir(flag string) (string, error) {
 	if flag != "" {
 		return flag, nil
 	}
-	if env := os.Getenv("AGMEM_SERVER_DIR"); env != "" {
+	if env := os.Getenv("RECALL_SERVER_DIR"); env != "" {
 		return env, nil
 	}
 	return storage.DefaultServerDir()
@@ -49,7 +49,7 @@ func NewKeysCmd(connect Connect) *cobra.Command {
 		Use:   "keys",
 		Short: "Manage API keys for hosted mode (server-side)",
 	}
-	root.PersistentFlags().StringVar(&dir, "dir", "", "server data dir (default ~/.local/share/agmem/server, env AGMEM_SERVER_DIR)")
+	root.PersistentFlags().StringVar(&dir, "dir", "", "server data dir (default ~/.local/share/recall/server, env RECALL_SERVER_DIR)")
 
 	withService := func(run func(cmd *cobra.Command, args []string, svc apikeys.Service) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, args []string) error {
@@ -131,7 +131,7 @@ func NewSpacesCmd(connect Connect, export Export) *cobra.Command {
 		Use:   "spaces",
 		Short: "Inspect and export memory spaces (server-side)",
 	}
-	root.PersistentFlags().StringVar(&dir, "dir", "", "server data dir (default ~/.local/share/agmem/server, env AGMEM_SERVER_DIR)")
+	root.PersistentFlags().StringVar(&dir, "dir", "", "server data dir (default ~/.local/share/recall/server, env RECALL_SERVER_DIR)")
 
 	list := &cobra.Command{
 		Use:   "list",
@@ -166,7 +166,7 @@ func NewSpacesCmd(connect Connect, export Export) *cobra.Command {
 		Long: `Snapshot a space's database to a file (live-safe under WAL).
 
 The snapshot is byte-compatible with a local memory database: point
-AGMEM_DB at it (or drop it at ~/.local/share/agmem/memory.db) and the
+RECALL_DB at it (or drop it at ~/.local/share/recall/memory.db) and the
 space's memories are fully local.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {

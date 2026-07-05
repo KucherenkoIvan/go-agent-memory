@@ -19,7 +19,7 @@ func serveCmd() *cobra.Command {
 		Short: "Host shared memory over gRPC (plaintext — put TLS/VPN in front)",
 		Long: `Host shared memory over gRPC.
 
-API keys (see 'agmem keys') both authenticate callers and select their
+API keys (see 'recall keys') both authenticate callers and select their
 memory space. Transport is plaintext: deploy on a private network or
 behind a TLS-terminating reverse proxy.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -38,7 +38,7 @@ behind a TLS-terminating reverse proxy.`,
 			return server.Run(cmd.Context(), cfg)
 		},
 	}
-	cmd.Flags().StringVar(&addr, "addr", "", "listen address (default :7846, env AGMEM_ADDR)")
-	cmd.Flags().StringVar(&dir, "dir", "", "server data dir (default ~/.local/share/agmem/server, env AGMEM_SERVER_DIR)")
+	cmd.Flags().StringVar(&addr, "addr", "", "listen address (default :7846, env RECALL_ADDR)")
+	cmd.Flags().StringVar(&dir, "dir", "", "server data dir (default ~/.local/share/recall/server, env RECALL_SERVER_DIR)")
 	return cmd
 }

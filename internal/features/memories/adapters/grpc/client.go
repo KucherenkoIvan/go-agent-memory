@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	agmemv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/agmem/v1"
+	recallv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/recall/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -17,12 +17,12 @@ import (
 // Client is the remote implementation of memories.Service: same facade,
 // gRPC underneath. Faces never know which one they got.
 type Client struct {
-	rpc    agmemv1.MemoryServiceClient
+	rpc    recallv1.MemoryServiceClient
 	apiKey string
 }
 
 func NewClient(conn grpc.ClientConnInterface, apiKey string) *Client {
-	return &Client{rpc: agmemv1.NewMemoryServiceClient(conn), apiKey: apiKey}
+	return &Client{rpc: recallv1.NewMemoryServiceClient(conn), apiKey: apiKey}
 }
 
 func (c *Client) auth(ctx context.Context) context.Context {
@@ -30,7 +30,7 @@ func (c *Client) auth(ctx context.Context) context.Context {
 }
 
 func (c *Client) Store(ctx context.Context, in managememories.StoreInput) (domain.MemoryID, error) {
-	resp, err := c.rpc.Store(c.auth(ctx), &agmemv1.StoreRequest{
+	resp, err := c.rpc.Store(c.auth(ctx), &recallv1.StoreRequest{
 		Content: in.Content, Summary: in.Summary, Kind: in.Kind,
 		Keywords: in.Keywords, Source: in.Source,
 		TtlHours:   int32(in.TTLHours), //nolint:gosec // domain caps ttl
@@ -50,7 +50,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) ([]dom
 	if !filters.Until.IsZero() {
 		until = timestamppb.New(filters.Until)
 	}
-	resp, err := c.rpc.Search(c.auth(ctx), &agmemv1.SearchRequest{
+	resp, err := c.rpc.Search(c.auth(ctx), &recallv1.SearchRequest{
 		Query: filters.Query, Keywords: filters.Keywords, KeywordsAny: filters.KeywordsAny,
 		Kind: filters.Kind, Since: since, Until: until,
 		Limit:       int32(filters.Limit), //nolint:gosec // use-case caps limit
@@ -75,7 +75,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) ([]dom
 }
 
 func (c *Client) Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error) {
-	resp, err := c.rpc.Get(c.auth(ctx), &agmemv1.GetRequest{Id: string(id)})
+	resp, err := c.rpc.Get(c.auth(ctx), &recallv1.GetRequest{Id: string(id)})
 	if err != nil {
 		return nil, mapRemoteError(err)
 	}
@@ -91,12 +91,12 @@ func (c *Client) Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryRea
 }
 
 func (c *Client) Rate(ctx context.Context, id domain.MemoryID, up bool) error {
-	_, err := c.rpc.Rate(c.auth(ctx), &agmemv1.RateRequest{Id: string(id), Up: up})
+	_, err := c.rpc.Rate(c.auth(ctx), &recallv1.RateRequest{Id: string(id), Up: up})
 	return mapRemoteError(err)
 }
 
 func (c *Client) Recall(ctx context.Context, keywords []string, budgetChars int) (string, error) {
-	resp, err := c.rpc.Recall(c.auth(ctx), &agmemv1.RecallRequest{
+	resp, err := c.rpc.Recall(c.auth(ctx), &recallv1.RecallRequest{
 		Keywords:    keywords,
 		BudgetChars: int32(budgetChars), //nolint:gosec // use-case defaults budget
 	})
@@ -107,7 +107,7 @@ func (c *Client) Recall(ctx context.Context, keywords []string, budgetChars int)
 }
 
 func (c *Client) Delete(ctx context.Context, id domain.MemoryID) error {
-	_, err := c.rpc.Delete(c.auth(ctx), &agmemv1.DeleteRequest{Id: string(id)})
+	_, err := c.rpc.Delete(c.auth(ctx), &recallv1.DeleteRequest{Id: string(id)})
 	return mapRemoteError(err)
 }
 

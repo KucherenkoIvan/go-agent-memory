@@ -1,6 +1,6 @@
-// agmem — harness-agnostic memory for AI agents. One binary, three faces:
-// CLI subcommands for shell-out agents, `agmem mcp` for MCP harnesses, and
-// (phase 2) `agmem tui` for humans.
+// recall — harness-agnostic memory for AI agents. One binary, three faces:
+// CLI subcommands for shell-out agents, `recall mcp` for MCP harnesses, and
+// (phase 2) `recall tui` for humans.
 package main
 
 import (
@@ -43,7 +43,7 @@ func main() {
 			return grpcadapter.NewClient(conn, remote.APIKey), func() { _ = conn.Close() }, nil
 		}
 
-		path := os.Getenv("AGMEM_DB")
+		path := os.Getenv("RECALL_DB")
 		if path == "" {
 			var err error
 			if path, err = storage.DefaultPath(); err != nil {
