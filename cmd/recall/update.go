@@ -171,12 +171,30 @@ func changelog(ctx context.Context, apiBase, current, latest string) ([]string, 
 	return lines, nil
 }
 
+// githubToken makes private repositories reachable: explicit env first,
+// then whatever the gh CLI is logged in with. Empty means anonymous.
+func githubToken(ctx context.Context) string {
+	for _, key := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
+		if token := os.Getenv(key); token != "" {
+			return token
+		}
+	}
+	out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func getJSON(ctx context.Context, url string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	if token := githubToken(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
