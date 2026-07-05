@@ -28,12 +28,12 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 - call pack with topic keywords when there is reason to believe past work touched this or a related problem (the project is familiar, recent changes led to the current task, the issue sounds recurrent) — not reflexively on every task, that would pull irrelevant context in;
 - when you rely on a memory, rate it afterwards — ratings drive ranking for everyone;
 - when you learn something worth keeping (a finding, a decision and its why, a preference, a location), store it before finishing.
-Store small, atomic memories: one fact per memory, with sharp keywords. Search and ranking are good — many small notes beat one big document. Search before storing to avoid duplicates; correct with supersedes, never re-store.`,
+Prefer small, focused memories: each should cover one self-contained finding or topic, with sharp keywords. Search and ranking are good — several focused notes beat one sprawling document. Search before storing to avoid duplicates; correct with supersedes, never re-store.`,
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "store_memory",
-		Description: "Store a memory for future agents — do this unprompted whenever you learn something durable. Keep memories small and atomic: one fact each, sharp keywords; split big findings into several notes (search and ranking do the assembling). Search first to avoid duplicates; pass supersedes to correct an existing memory.",
+		Description: "Store a memory for future agents — do this unprompted whenever you learn something durable. Prefer small, focused memories: each covering one self-contained finding or topic, with sharp keywords; split sprawling write-ups into several notes (search and ranking do the assembling). Search first to avoid duplicates; pass supersedes to correct an existing memory.",
 	}, storeHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{

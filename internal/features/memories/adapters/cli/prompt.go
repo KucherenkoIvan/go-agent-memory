@@ -26,7 +26,7 @@ If recall returns nothing relevant, fall back to your harness's builtin memory (
       -k <topic> -k <topic> [--ttl <hours>] [--supersedes <id>] "<content>"
 
 Rules:
-- keep memories small and atomic: one fact per memory, sharp keywords. Split a big finding into several notes — search and ranking reassemble them better than one document.
+- prefer small, focused memories: each should cover one self-contained finding or topic, with sharp keywords. Split a sprawling write-up into several notes — search and ranking reassemble them better than one document.
 - summary is required: one line, it is what future agents see in search results.
 - keywords: lowercase topics; use prefixes for scoping, e.g. project:myapp, task:lint.
 - never store secrets or credentials.
