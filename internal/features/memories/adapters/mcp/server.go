@@ -23,16 +23,22 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 		Name:    "recall",
 		Title:   "Recall — agent memory",
 		Version: version,
-	}, nil)
+	}, &sdk.ServerOptions{
+		Instructions: `Persistent memory shared across sessions, models, and harnesses. Use it on your own initiative — nobody will prompt you to:
+- at session start, call pack with your task's topic keywords to recall what past agents learned;
+- when you rely on a memory, rate it afterwards — ratings drive ranking for everyone;
+- when you learn something worth keeping (a finding, a decision and its why, a preference, a location), store it before finishing.
+Store small, atomic memories: one fact per memory, with sharp keywords. Search and ranking are good — many small notes beat one big document. Search before storing to avoid duplicates; correct with supersedes, never re-store.`,
+	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "store_memory",
-		Description: "Store a memory for future agents. Search first to avoid duplicates; pass supersedes to correct an existing memory.",
+		Description: "Store a memory for future agents — do this unprompted whenever you learn something durable. Keep memories small and atomic: one fact each, sharp keywords; split big findings into several notes (search and ranking do the assembling). Search first to avoid duplicates; pass supersedes to correct an existing memory.",
 	}, storeHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "search_memory",
-		Description: "Search memories by full-text query, keywords, kind, and dates. Returns ranked summaries — use get_memory for full content.",
+		Description: "Search memories by full-text query, keywords, kind, and dates. Returns ranked summaries — use get_memory for full content. Reach for this on your own whenever a past agent might have learned something relevant.",
 	}, searchHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -47,7 +53,7 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "pack",
-		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
+		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Call this unprompted at the start of any task. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
 	}, packHandler(svc))
 
 	return server

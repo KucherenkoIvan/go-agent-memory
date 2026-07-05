@@ -4,7 +4,7 @@ package cli
 // into a harness's AGENTS.md/CLAUDE.md. The system documents itself.
 const agentPrompt = `## Persistent memory (recall)
 
-A shared memory survives across sessions, models, and harnesses. Use it via the ` + "`recall`" + ` CLI (or the equivalent MCP tools if configured).
+A shared memory survives across sessions, models, and harnesses. Use it via the ` + "`recall`" + ` CLI (or the equivalent MCP tools if configured). Use it on your own initiative — nobody will prompt you: recall at task start, rate what you used, store what you learned before finishing.
 
 **At session start** — recall what past agents learned about your task:
 
@@ -26,6 +26,7 @@ If recall returns nothing relevant, fall back to your harness's builtin memory (
       -k <topic> -k <topic> [--ttl <hours>] [--supersedes <id>] "<content>"
 
 Rules:
+- keep memories small and atomic: one fact per memory, sharp keywords. Split a big finding into several notes — search and ranking reassemble them better than one document.
 - summary is required: one line, it is what future agents see in search results.
 - keywords: lowercase topics; use prefixes for scoping, e.g. project:myapp, task:lint.
 - never store secrets or credentials.
