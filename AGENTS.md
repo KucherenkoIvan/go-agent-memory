@@ -12,9 +12,10 @@ recall — harness-agnostic memory for AI agents, built on [go-kernel](https://g
 2. **Memory semantics are invariants, not conventions**: agents supersede, never edit; required one-line summary; ≥1 normalized keyword; validated kind; non-negative TTL. They live in the `Memory` aggregate — never re-checked in adapters.
 3. **Documented deviations — do not "fix" them**: FTS5 is maintained by SQL triggers in the migration (the DB is shared by multiple processes; in-process events cannot index foreign writes). Multi-process access is the deployment model and depends on the kernel sqlite defaults (WAL, busy_timeout, `BEGIN IMMEDIATE`) — do not add locks, and keep write transactions short.
 4. **The CLI/MCP agent contract is frozen surface**: JSON on non-TTY stdout, exit 0/1 with machine-readable errors, no prompts ever. Changing output shapes breaks other agents — treat like a public API.
-5. **stdout is sacred in `cmd/recall`**: it carries command output and MCP's stdio transport; slog stays discarded (or goes to a file if ever needed). A stray print corrupts the MCP session.
-6. **Schema changes are migrations** in `internal/shared/infra/storage/migrations/` — numbered, up-only; remember the FTS triggers when altering `memories` columns.
-7. **There is no CI — you are the CI.** `make lint` and `make test` must pass before every commit. Tests use real components (`:memory:` sqlite through `storage.Open`); port fakes are hand-written, no mock frameworks.
+5. **CLI and MCP are one product with two faces** — the same end user drives both, and they must stay functionally identical. Any semantic change (search matching, ranking, defaults, fields, tool/flag descriptions) lands in both adapters in the same commit; a parity gap between them is a bug, not a style choice.
+6. **stdout is sacred in `cmd/recall`**: it carries command output and MCP's stdio transport; slog stays discarded (or goes to a file if ever needed). A stray print corrupts the MCP session.
+7. **Schema changes are migrations** in `internal/shared/infra/storage/migrations/` — numbered, up-only; remember the FTS triggers when altering `memories` columns.
+8. **There is no CI — you are the CI.** `make lint` and `make test` must pass before every commit. Tests use real components (`:memory:` sqlite through `storage.Open`); port fakes are hand-written, no mock frameworks.
 
 ## Conventions
 
@@ -30,3 +31,11 @@ make build   # bin/recall
 make test    # all tests — no docker, sqlite is in-memory
 make lint    # gofmt + go vet + golangci-lint — required before commit
 ```
+
+After every commit, rebuild and reinstall the local binary — the version is stamped from `git describe` at build time, so only a post-commit build carries the new revision, and the MCP config runs the installed copy:
+
+```sh
+make build && rm -f ~/go/bin/recall && cp bin/recall ~/go/bin/recall
+```
+
+The `rm` first is not optional: macOS SIGKILLs an executable whose contents were overwritten in place (stale code-signature cache); removing the target lets `cp` create a fresh inode.
