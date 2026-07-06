@@ -38,7 +38,7 @@ Prefer small, focused memories: each should cover one self-contained finding or 
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "search_memory",
-		Description: "Search memories by full-text query, keywords, kind, and dates. Returns ranked summaries — use get_memory for full content. Reach for this on your own whenever a past agent might have learned something relevant.",
+		Description: "Search memories by keywords, full-text query, kind, and dates. Keywords OR-match and boost rank, like pack — set and=true to require every keyword when narrowing hard. Returns ranked summaries — use get_memory for full content. Reach for this on your own whenever a past agent might have learned something relevant.",
 	}, searchHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -98,8 +98,9 @@ func storeHandler(svc memories.Service) sdk.ToolHandlerFor[storeIn, storeOut] {
 }
 
 type searchIn struct {
-	Query    string   `json:"query,omitempty" jsonschema:"full-text query over summaries and content"`
-	Keywords []string `json:"keywords,omitempty" jsonschema:"all must match"`
+	Query    string   `json:"query,omitempty" jsonschema:"full-text query layered over the keyword results"`
+	Keywords []string `json:"keywords,omitempty" jsonschema:"any may match (OR); more matches rank higher"`
+	And      bool     `json:"and,omitempty" jsonschema:"require every keyword to match instead of any"`
 	Kind     string   `json:"kind,omitempty"`
 	Since    string   `json:"since,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD"`
 	Until    string   `json:"until,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD"`
@@ -121,10 +122,16 @@ func searchHandler(svc memories.Service) sdk.ToolHandlerFor[searchIn, searchOut]
 		if err != nil {
 			return nil, searchOut{}, err
 		}
-		results, err := svc.Search(ctx, ports.SearchFilters{
-			Query: in.Query, Keywords: in.Keywords, Kind: in.Kind,
+		filters := ports.SearchFilters{
+			Query: in.Query, Kind: in.Kind,
 			Since: since, Until: until, Limit: in.Limit, IncludeDead: in.All,
-		})
+		}
+		if in.And {
+			filters.Keywords = in.Keywords
+		} else {
+			filters.KeywordsAny = in.Keywords
+		}
+		results, err := svc.Search(ctx, filters)
 		if err != nil {
 			return nil, searchOut{}, err
 		}
