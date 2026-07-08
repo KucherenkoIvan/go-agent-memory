@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 )
@@ -44,17 +45,17 @@ func TestFuzzyRank_CatchesTypos(t *testing.T) {
 	}
 
 	// human typo: "golanci" — exact search misses, fuzzy must not
-	hits := fuzzyRank(pool, []string{"golanci"})
+	hits := fuzzyRank(pool, []string{"golanci"}, sortCreatedAsc)
 	if len(hits) == 0 || hits[0].ID != "m1" {
 		t.Fatalf("typo must fuzzy-match golangci memory: %v", ids(hits))
 	}
 
 	// every term must match: "golanci" + "docker" share no memory
-	if hits := fuzzyRank(pool, []string{"golanci", "docker"}); len(hits) != 0 {
+	if hits := fuzzyRank(pool, []string{"golanci", "docker"}, sortCreatedAsc); len(hits) != 0 {
 		t.Fatalf("AND across terms: %v", ids(hits))
 	}
 
-	if hits := fuzzyRank(pool, nil); hits != nil {
+	if hits := fuzzyRank(pool, nil, sortCreatedAsc); hits != nil {
 		t.Fatalf("no terms → no fuzzy layer: %v", ids(hits))
 	}
 }
@@ -94,5 +95,50 @@ func TestRunSearch_LayersCarryScreenState(t *testing.T) {
 	}
 	if fake.searches[1].Query != "go lint" {
 		t.Fatalf("text layer: %+v", fake.searches[1])
+	}
+}
+
+func TestSearchLayers_RelevanceBeatsSortMode(t *testing.T) {
+	old := time.Now().Add(-72 * time.Hour)
+	strong := result("strong", []string{"jwt"}, "jwt token rotation")
+	strong.Score, strong.CreatedAt = 9.0, time.Now()
+	weak := result("weak", []string{"jwt"}, "jwt mentioned once")
+	weak.Score, weak.CreatedAt = 3.0, old
+	tiedA := result("tied-new", []string{"jwt"}, "same score, newer")
+	tiedA.Score, tiedA.CreatedAt = 1.0, time.Now()
+	tiedB := result("tied-old", []string{"jwt"}, "same score, older")
+	tiedB.Score, tiedB.CreatedAt = 1.0, old
+
+	// default sort is created↑ — without relevance priority, "weak" (older)
+	// would jump above "strong"
+	fake := &fakeService{results: []domain.SearchResult{strong, weak, tiedA, tiedB}}
+	results, err := runSearch(context.Background(), fake,
+		searchSpec{terms: []string{"jwt"}, sort: sortCreatedAsc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := ids(results)
+	if got[0] != "strong" || got[1] != "weak" {
+		t.Fatalf("relevance must outrank the sort mode: %v", got)
+	}
+	if got[2] != "tied-old" || got[3] != "tied-new" {
+		t.Fatalf("equal relevance must fall back to the sort mode: %v", got)
+	}
+}
+
+func TestFuzzyRank_CutoffDropsScatteredMatches(t *testing.T) {
+	pool := []domain.SearchResult{
+		result("scattered", []string{"k"}, "r_e_c_a_l_l spread out"),
+		result("contiguous", []string{"k"}, "recall exact word"),
+	}
+	hits := fuzzyRank(pool, []string{"recall"}, sortCreatedAsc)
+	if len(hits) != 1 || hits[0].ID != "contiguous" {
+		t.Fatalf("sub-half coherence must be filtered out: %v", ids(hits))
+	}
+
+	// user typo: "recal" still carries "rec" — cutoff must not kill typos
+	hits = fuzzyRank(pool, []string{"recal"}, sortCreatedAsc)
+	if len(hits) != 1 || hits[0].ID != "contiguous" {
+		t.Fatalf("typo-grade fuzz must survive the cutoff: %v", ids(hits))
 	}
 }

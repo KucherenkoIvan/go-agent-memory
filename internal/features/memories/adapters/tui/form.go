@@ -345,17 +345,13 @@ func (f *formModel) view() string {
 		b.WriteString(f.st.errText.Render(f.fieldErr) + "\n")
 	}
 
-	switch {
-	case f.confirmAct == confirmSave:
-		b.WriteString(f.st.errText.Render("store correction superseding " + f.supersedes + "? — y: save · any other key: cancel"))
-	case f.confirmAct == confirmDiscard:
-		b.WriteString(f.st.errText.Render("discard unsaved changes? — y: discard · any other key: keep editing"))
-	case f.state == formEdit:
-		b.WriteString(f.st.dim.Render("esc: done editing · tab: next field · ctrl+s: save"))
-	case f.state == formFind:
-		b.WriteString(f.st.dim.Render("enter/esc: back to fields"))
-	default:
-		b.WriteString(f.st.dim.Render("j/k: fields · enter: edit · /: find · ctrl+s: save · esc: discard"))
+	// key hints live in the app footer (modeHelp); only confirmation
+	// warnings render here — they are content, not bindings
+	switch f.confirmAct {
+	case confirmSave:
+		b.WriteString(f.st.errText.Render("store correction superseding " + f.supersedes + "?"))
+	case confirmDiscard:
+		b.WriteString(f.st.errText.Render("discard unsaved changes?"))
 	}
 	return b.String()
 }

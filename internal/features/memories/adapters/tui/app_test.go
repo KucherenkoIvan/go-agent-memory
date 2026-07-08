@@ -163,7 +163,11 @@ func TestSort_DefaultEarliestFirst_CycleReorders(t *testing.T) {
 		t.Fatalf("default sort must put earliest on top, got %s", first())
 	}
 
-	press(t, app, "s") // created↑ → rating↓
+	press(t, app, "s") // created↑ → created↓
+	if app.list.sort != sortCreatedDesc || first() != "newest" {
+		t.Fatalf("created↓: sort=%v first=%s", app.list.sort, first())
+	}
+	press(t, app, "s") // → rating↓
 	if app.list.sort != sortRatingDesc || first() != "mid" {
 		t.Fatalf("rating↓: sort=%v first=%s", app.list.sort, first())
 	}
@@ -304,9 +308,13 @@ func TestHighlightFuzzy_MatchesAndClears(t *testing.T) {
 	if m := matchedBytes("alpha beta", nil); len(m) != 0 {
 		t.Fatal("no terms must match nothing")
 	}
-	// fuzzy: scattered characters still match
-	if m := matchedBytes("memory_keywords mirror", []string{"mkm"}); len(m) == 0 {
-		t.Fatal("fuzzy subsequence must match")
+	// typo-grade fuzz passes the cutoff: "keywrds" holds a 4+ run of 7
+	if m := matchedBytes("memory_keywords mirror", []string{"keywrds"}); len(m) == 0 {
+		t.Fatal("coherent fuzzy match must highlight")
+	}
+	// scattered subsequence fails it: "mkm" never runs 2+ chars together
+	if m := matchedBytes("memory_keywords mirror", []string{"mkm"}); len(m) != 0 {
+		t.Fatalf("scattered match must not highlight: %v", m)
 	}
 }
 
@@ -530,6 +538,71 @@ func TestReviewPreset_FiltersNetNegative(t *testing.T) {
 	}
 	if got := fake.searches[len(fake.searches)-1].Limit; got != widePoolLimit {
 		t.Fatalf("review must fetch wide: limit=%d", got)
+	}
+}
+
+func TestRemote_ModalFlowMatchesForm(t *testing.T) {
+	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	press(t, app, "c")
+	if app.mode != modeRemote || app.remote.state != formNav ||
+		app.remote.addr.Focused() || app.remote.key.Focused() {
+		t.Fatal("remote must open unfocused, in navigation")
+	}
+
+	// runes navigate, they don't type; enter starts editing
+	press(t, app, "x")
+	if app.remote.addr.Value() != "" {
+		t.Fatal("runes in navigation must not edit fields")
+	}
+	press(t, app, "enter", "x")
+	if !app.remote.addr.Focused() || app.remote.addr.Value() != "x" {
+		t.Fatalf("enter must focus the field for typing: %q", app.remote.addr.Value())
+	}
+	press(t, app, "esc")
+	if app.remote.state != formNav || app.remote.addr.Focused() {
+		t.Fatal("esc must stop editing, back to navigation")
+	}
+
+	// q routes to the dirty-discard flow instead of quitting
+	press(t, app, "q")
+	if app.remote == nil || app.remote.confirmAct != confirmDiscard {
+		t.Fatal("q on a dirty remote must ask to discard")
+	}
+	press(t, app, "y")
+	if app.mode != modeList {
+		t.Fatalf("confirmed discard must close, mode=%v", app.mode)
+	}
+}
+
+func TestReconnect_ProbesBeforeDeclaringConnected(t *testing.T) {
+	// grpc connects lazily — a service that cannot serve must fail the
+	// reconnect and release its handle, not report "connected"
+	bad := &fakeService{searchErr: context.DeadlineExceeded}
+	released := false
+	msg := reconnectCmd(context.Background(), nil,
+		func(context.Context) (memories.Service, func(), error) {
+			return bad, func() { released = true }, nil
+		})()
+	if _, failed := msg.(reconnectFailedMsg); !failed {
+		t.Fatalf("unservable connection must fail the probe: %T", msg)
+	}
+	if !released {
+		t.Fatal("failed probe must close the new handle")
+	}
+
+	good := &fakeService{}
+	msg = reconnectCmd(context.Background(), nil,
+		func(context.Context) (memories.Service, func(), error) {
+			return good, func() {}, nil
+		})()
+	if _, ok := msg.(reconnectedMsg); !ok {
+		t.Fatalf("servable connection must succeed: %T", msg)
+	}
+	if len(good.searches) != 1 {
+		t.Fatal("success must be based on a served probe request")
 	}
 }
 

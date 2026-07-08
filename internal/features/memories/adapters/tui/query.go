@@ -84,11 +84,13 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]do
 		return nil, err
 	}
 
-	fuzzyHits := fuzzyRank(pool, spec.terms)
-	sortResults(keywordHits, spec.sort)
-	sortResults(textHits, spec.sort)
-	sortResults(fuzzyHits, spec.sort)
-	return mergeLayers(keywordHits, textHits, fuzzyHits), nil
+	// relevance first inside every layer — the reader's score for keyword
+	// and text hits, the fuzzy match score for the pool — with the sort
+	// mode breaking ties only
+	byScore := func(r domain.SearchResult) float64 { return r.Score }
+	sortLayer(keywordHits, byScore, spec.sort)
+	sortLayer(textHits, byScore, spec.sort)
+	return mergeLayers(keywordHits, textHits, fuzzyRank(pool, spec.terms, spec.sort)), nil
 }
 
 // mergeLayers concatenates the layers dropping duplicates — earlier layers
@@ -109,8 +111,9 @@ func mergeLayers(layers ...[]domain.SearchResult) []domain.SearchResult {
 }
 
 // fuzzyRank keeps pool entries where every term fuzzy-matches the memory's
-// keywords+summary (typo tolerance), ordered by total match score.
-func fuzzyRank(pool []domain.SearchResult, terms []string) []domain.SearchResult {
+// keywords+summary (typo tolerance), ordered by total match score — closer
+// matches on top, the sort mode breaking equal scores.
+func fuzzyRank(pool []domain.SearchResult, terms []string, mode sortMode) []domain.SearchResult {
 	if len(terms) == 0 || len(pool) == 0 {
 		return nil
 	}
@@ -120,15 +123,20 @@ func fuzzyRank(pool []domain.SearchResult, terms []string) []domain.SearchResult
 		targets[i] = strings.Join(r.Keywords, " ") + " " + r.Summary
 	}
 
-	// every term must match somewhere in the target; scores sum up
+	// every term must match somewhere in the target — coherently (see
+	// coherentMatch); scores sum up
 	scores := map[int]int{} // pool index → summed score
 	for _, m := range fuzzy.Find(terms[0], targets) {
-		scores[m.Index] = m.Score
+		if coherentMatch(terms[0], targets[m.Index]) {
+			scores[m.Index] = m.Score
+		}
 	}
 	for _, term := range terms[1:] {
 		matched := map[int]int{}
 		for _, m := range fuzzy.Find(term, targets) {
-			matched[m.Index] = m.Score
+			if coherentMatch(term, targets[m.Index]) {
+				matched[m.Index] = m.Score
+			}
 		}
 		for idx := range scores {
 			if s, ok := matched[idx]; ok {
@@ -146,10 +154,14 @@ func fuzzyRank(pool []domain.SearchResult, terms []string) []domain.SearchResult
 	for idx, score := range scores {
 		ranked = append(ranked, scored{idx, score})
 	}
-	// score desc, pool order (already rank-sorted) breaking ties
+	// score desc; equal scores fall back to the sort mode, then pool order
+	tie := cmpMode(mode)
 	sort.Slice(ranked, func(i, j int) bool {
 		if ranked[i].score != ranked[j].score {
 			return ranked[i].score > ranked[j].score
+		}
+		if c := tie(pool[ranked[i].idx], pool[ranked[j].idx]); c != 0 {
+			return c < 0
 		}
 		return ranked[i].idx < ranked[j].idx
 	})

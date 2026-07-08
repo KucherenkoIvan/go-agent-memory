@@ -44,7 +44,8 @@ type listModel struct {
 type sortMode int
 
 const (
-	sortCreatedAsc sortMode = iota // earliest on top — the default
+	sortCreatedAsc  sortMode = iota // earliest on top — the default
+	sortCreatedDesc                 // latest on top
 	sortRatingDesc
 	sortRatingAsc
 	sortAccessDesc
@@ -54,6 +55,8 @@ const (
 
 func (s sortMode) label() string {
 	switch s {
+	case sortCreatedDesc:
+		return "created↓"
 	case sortRatingDesc:
 		return "rating↓"
 	case sortRatingAsc:
@@ -67,12 +70,14 @@ func (s sortMode) label() string {
 	}
 }
 
-// sortResults orders a result slice by the mode, stably so upstream order
-// (relevance) survives ties.
-func sortResults(results []domain.SearchResult, mode sortMode) {
+// cmpMode is the sort-mode comparator, shared by the timeline sort and the
+// tie-breaking inside relevance-ranked layers.
+func cmpMode(mode sortMode) func(a, b domain.SearchResult) int {
 	rating := func(r domain.SearchResult) int { return r.VotesUp - r.VotesDown }
-	slices.SortStableFunc(results, func(a, b domain.SearchResult) int {
+	return func(a, b domain.SearchResult) int {
 		switch mode {
+		case sortCreatedDesc:
+			return b.CreatedAt.Compare(a.CreatedAt)
 		case sortRatingDesc:
 			return rating(b) - rating(a)
 		case sortRatingAsc:
@@ -84,6 +89,27 @@ func sortResults(results []domain.SearchResult, mode sortMode) {
 		default:
 			return a.CreatedAt.Compare(b.CreatedAt)
 		}
+	}
+}
+
+// sortResults orders a result slice by the mode alone (timeline view).
+func sortResults(results []domain.SearchResult, mode sortMode) {
+	slices.SortStableFunc(results, cmpMode(mode))
+}
+
+// sortLayer keeps relevance (higher first) as the primary order and lets
+// the mode break exact ties only — closer matches always rank above
+// weaker ones, whatever the sort.
+func sortLayer(results []domain.SearchResult, relevance func(domain.SearchResult) float64, mode sortMode) {
+	tie := cmpMode(mode)
+	slices.SortStableFunc(results, func(a, b domain.SearchResult) int {
+		if ra, rb := relevance(a), relevance(b); ra != rb {
+			if ra > rb {
+				return -1
+			}
+			return 1
+		}
+		return tie(a, b)
 	})
 }
 
@@ -178,8 +204,8 @@ func (m *listModel) cycleKind() {
 	m.kind = ring[(slices.Index(ring, m.kind)+1)%len(ring)]
 }
 
-// cycleSort rotates the display order: created↑ → rating↓ → rating↑ →
-// reads↓ → reads↑ → created↑.
+// cycleSort rotates the display order: created↑ → created↓ → rating↓ →
+// rating↑ → reads↓ → reads↑ → created↑.
 func (m *listModel) cycleSort() {
 	m.sort = (m.sort + 1) % sortModes
 }

@@ -77,9 +77,10 @@ func (h helpSet) FullHelp() [][]key.Binding {
 	return h.full
 }
 
-// ShortHelp/FullHelp implement help.KeyMap for the list footer.
+// ShortHelp/FullHelp implement help.KeyMap for the list footer. Short stays
+// essentials-only — everything else lives behind ? (FullHelp).
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Search, k.Enter, k.RateUp, k.Supersede, k.Delete, k.Help, k.Quit}
+	return []key.Binding{k.Search, k.Enter, k.Help, k.Quit}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {

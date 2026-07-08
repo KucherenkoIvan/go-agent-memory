@@ -20,10 +20,11 @@ type fakeService struct {
 	deletes []string
 	stores  []managememories.StoreInput
 
-	results  []domain.SearchResult
-	memory   *domain.MemoryReadModel
-	storeErr error
-	storeID  domain.MemoryID
+	results   []domain.SearchResult
+	memory    *domain.MemoryReadModel
+	storeErr  error
+	storeID   domain.MemoryID
+	searchErr error
 }
 
 func (f *fakeService) Store(_ context.Context, in managememories.StoreInput) (domain.MemoryID, error) {
@@ -39,6 +40,9 @@ func (f *fakeService) Store(_ context.Context, in managememories.StoreInput) (do
 
 func (f *fakeService) Search(_ context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
 	f.searches = append(f.searches, filters)
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
 	return f.results, nil
 }
 

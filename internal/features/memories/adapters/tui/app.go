@@ -205,16 +205,16 @@ func (a *App) typing() bool {
 	case modeForm:
 		return a.form != nil && a.form.typing()
 	case modeRemote:
-		return true
+		return a.remote != nil && a.remote.typing()
 	default:
 		return false
 	}
 }
 
 func (a *App) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// q never hard-quits out of the editor — unsaved work goes through the
-	// form's own discard confirmation instead
-	if msg.String() == "ctrl+c" || (msg.String() == "q" && !a.typing() && a.mode != modeForm) {
+	// q never hard-quits out of the editors — unsaved work goes through
+	// their own discard confirmations instead
+	if msg.String() == "ctrl+c" || (msg.String() == "q" && !a.typing() && a.mode != modeForm && a.mode != modeRemote) {
 		if a.cleanup != nil {
 			a.cleanup()
 		}
@@ -528,36 +528,93 @@ func (a *App) updateConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// closeRemote leaves the endpoint screen — unless the connection is broken,
+// in which case the app stays parked here until it is fixed or unset.
+func (a *App) closeRemote() {
+	if a.remote.broken || a.svc == nil {
+		a.toast("no working connection — save a valid endpoint or unset", true)
+		return
+	}
+	a.remote = nil
+	a.mode = modeList
+}
+
+func (a *App) requestRemoteDiscard() {
+	if a.remote.dirty() {
+		a.remote.confirmAct = confirmDiscard
+		return
+	}
+	a.closeRemote()
+}
+
 func (a *App) updateRemoteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	r := a.remote
-	switch msg.String() {
-	case "esc":
-		if r.broken || a.svc == nil {
-			a.toast("no working connection — save a valid endpoint or unset", true)
+
+	// a pending confirmation intercepts everything: y commits, all else cancels
+	if r.confirmAct != confirmNone {
+		act := r.confirmAct
+		r.confirmAct = confirmNone
+		if msg.String() != "y" {
 			return a, nil
 		}
-		a.remote = nil
-		a.mode = modeList
-		return a, nil
-	case "tab", "shift+tab":
-		r.setFocus((r.focus + 1) % 2)
-		return a, nil
-	case "ctrl+s":
-		if err := r.save(); err != nil {
-			a.toast(err.Error(), true)
+		switch act {
+		case confirmDiscard:
+			a.closeRemote()
 			return a, nil
-		}
-		a.inFlight++
-		return a, reconnectCmd(a.ctx, a.cleanup, a.connect)
-	case "ctrl+x":
-		if err := remoteUnset(); err != nil {
-			a.toast(err.Error(), true)
-			return a, nil
+		case confirmUnset:
+			if err := remoteUnset(); err != nil {
+				a.toast(err.Error(), true)
+				return a, nil
+			}
+		default: // confirmSave
+			if err := r.save(); err != nil {
+				a.toast(err.Error(), true)
+				return a, nil
+			}
 		}
 		a.inFlight++
 		return a, reconnectCmd(a.ctx, a.cleanup, a.connect)
 	}
-	return a, r.update(msg)
+
+	switch msg.String() {
+	case "ctrl+s": // from any state
+		r.confirmAct = confirmSave
+		r.stopEdit()
+		return a, nil
+	case "ctrl+x":
+		r.confirmAct = confirmUnset
+		r.stopEdit()
+		return a, nil
+	}
+
+	if r.state == formEdit {
+		switch msg.String() {
+		case "esc", "enter": // done typing — back to navigation
+			r.stopEdit()
+			return a, nil
+		case "tab":
+			r.move(1)
+			r.startEdit()
+			return a, nil
+		case "shift+tab":
+			r.move(-1)
+			r.startEdit()
+			return a, nil
+		}
+		return a, r.update(msg)
+	}
+
+	switch msg.String() { // navigation
+	case "esc", "d", "q":
+		a.requestRemoteDiscard()
+	case "j", "down", "tab":
+		r.move(1)
+	case "k", "up", "shift+tab":
+		r.move(-1)
+	case "enter":
+		r.startEdit()
+	}
+	return a, nil
 }
 
 // modeHelp picks the footer bindings for the current screen, so the bottom
@@ -573,7 +630,7 @@ func (a *App) modeHelp() help.KeyMap {
 			return helpSet{short: []key.Binding{apply, blur}}
 		}
 		return helpSet{
-			short: []key.Binding{k.Back, k.Find, k.RateUp, k.Supersede, k.Delete, k.Help, k.Quit},
+			short: []key.Binding{k.Back, k.Find, k.Help, k.Quit},
 			full: [][]key.Binding{
 				{k.Back, k.Find, k.Follow},
 				{k.RateUp, k.RateDown, k.Supersede, k.Delete},
@@ -601,7 +658,20 @@ func (a *App) modeHelp() help.KeyMap {
 		cancel := key.NewBinding(key.WithKeys("esc"), key.WithHelp("any key", "cancel"))
 		return helpSet{short: []key.Binding{k.Confirm, cancel}}
 	case modeRemote:
-		return helpSet{short: []key.Binding{k.Submit, k.Unset, k.Back}}
+		r := a.remote
+		edit := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit field"))
+		move := key.NewBinding(key.WithKeys("j", "k"), key.WithHelp("j/k", "fields"))
+		done := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc/enter", "done editing"))
+		back := key.NewBinding(key.WithKeys("esc", "d"), key.WithHelp("esc/d", "back"))
+		switch {
+		case r != nil && r.confirmAct != confirmNone:
+			cancel := key.NewBinding(key.WithKeys("esc"), key.WithHelp("any key", "cancel"))
+			return helpSet{short: []key.Binding{k.Confirm, cancel}}
+		case r != nil && r.state == formEdit:
+			return helpSet{short: []key.Binding{done, k.Submit}}
+		default:
+			return helpSet{short: []key.Binding{move, edit, k.Submit, k.Unset, back}}
+		}
 	default:
 		if a.list.search.Focused() {
 			return helpSet{short: []key.Binding{apply, blur}}
@@ -641,7 +711,10 @@ func (a *App) View() string {
 		}
 	}
 
-	bodyH := max(1, a.height-2)
+	// size the body against the rendered footer: expanded help (?) grows
+	// downward and must crop the body, never push it off the top
+	footer := a.help.View(a.modeHelp())
+	bodyH := max(1, a.height-1-lipgloss.Height(footer))
 	return lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(body) +
-		"\n" + status + "\n" + a.help.View(a.modeHelp())
+		"\n" + status + "\n" + footer
 }
