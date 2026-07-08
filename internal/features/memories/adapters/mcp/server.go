@@ -26,19 +26,21 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 	}, &sdk.ServerOptions{
 		Instructions: `Persistent memory shared across sessions, models, and harnesses. You may be asked to use it explicitly, but you do not need to be — using it on your own initiative is expected:
 - call pack with topic keywords when there is reason to believe past work touched this or a related problem (the project is familiar, recent changes led to the current task, the issue sounds recurrent) — not reflexively on every task, that would pull irrelevant context in;
+- search again mid-session when the work shifts to a new problem — the opening pack does not cover topics that emerged later;
 - when you rely on a memory, rate it afterwards — ratings drive ranking for everyone;
-- when you learn something worth keeping (a finding, a decision and its why, a preference, a location), store it before finishing.
+- store at the moment of a finding — a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Do not batch stores to end-of-session: wrap-up and context compaction both lose findings.
+If your harness has builtin memory, recall is the primary store: durable findings go here even when they would also fit the builtin one — recall is shared, the builtin is not. Reserve builtin memory for harness-specific operating notes.
 Prefer small, focused memories: each should cover one self-contained finding or topic, with sharp keywords. Search and ranking are good — several focused notes beat one sprawling document. Search before storing to avoid duplicates; correct with supersedes, never re-store.`,
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "store_memory",
-		Description: "Store a memory for future agents — do this unprompted whenever you learn something durable. Prefer small, focused memories: each covering one self-contained finding or topic, with sharp keywords; split sprawling write-ups into several notes (search and ranking do the assembling). Search first to avoid duplicates; pass supersedes to correct an existing memory.",
+		Description: "Store a memory for future agents — do this unprompted, at the moment of the finding: a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Don't batch to end-of-session. If your harness has builtin memory, durable findings go here instead — recall is shared across sessions and harnesses, the builtin is not. Prefer small, focused memories: each covering one self-contained finding or topic, with sharp keywords; split sprawling write-ups into several notes (search and ranking do the assembling). Search first to avoid duplicates; pass supersedes to correct an existing memory.",
 	}, storeHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "search_memory",
-		Description: "Search memories by keywords, full-text query, kind, and dates. Keywords OR-match and boost rank, like pack — set and=true to require every keyword when narrowing hard. Returns ranked summaries — use get_memory for full content. Reach for this on your own whenever a past agent might have learned something relevant.",
+		Description: "Search memories by keywords, full-text query, kind, and dates. Keywords OR-match and boost rank, like pack — set and=true to require every keyword when narrowing hard. Returns ranked summaries — use get_memory for full content. Reach for this on your own whenever a past agent might have learned something relevant — including mid-session, when the work shifts to a topic the opening pack didn't cover.",
 	}, searchHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -53,7 +55,7 @@ Prefer small, focused memories: each should cover one self-contained finding or 
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "pack",
-		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Call this on your own when past work plausibly touched the same or a related problem — a familiar project, recent changes leading to the current task, a recurrent-sounding issue. Skip it when the task is clearly fresh ground; a reflexive pack pulls irrelevant context in. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory (if you have one).",
+		Description: "Session bootstrap: top-ranked memories for the given keywords assembled into one markdown block within a character budget. Call this on your own when past work plausibly touched the same or a related problem — a familiar project, recent changes leading to the current task, a recurrent-sounding issue. Skip it when the task is clearly fresh ground; a reflexive pack pulls irrelevant context in. Keywords OR-match — throw in every candidate topic; memories matching more of them rank higher. If nothing is found, fall back to your harness's builtin memory for reading (if you have one) — new findings still get stored in recall either way.",
 	}, packHandler(svc))
 
 	return server

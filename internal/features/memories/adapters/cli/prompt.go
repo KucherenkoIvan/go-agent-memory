@@ -13,19 +13,22 @@ A shared memory survives across sessions, models, and harnesses. Use it via the 
 
 Keywords OR-match in both: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. --text layers a full-text query over the keyword results; --and (search only) requires every keyword when you need to narrow hard.
 
-If recall returns nothing relevant, fall back to your harness's builtin memory (if you have one) — and store anything useful you find there into recall so it is shared next time.
+Search again mid-session when the work shifts to a new problem — the opening pack does not cover topics that emerged later.
+
+If recall returns nothing relevant, fall back to your harness's builtin memory for reading (if you have one) — and store anything useful you find there into recall so it is shared next time.
 
 **When you rely on a memory** — rate it afterwards; ratings drive ranking for future agents:
 
     recall memory rate <id> up      # it was correct and helped
     recall memory rate <id> down    # it was wrong or misleading
 
-**When you learn something worth keeping** (a research result, a decision and its why, a preference, a location of something), store it — but search first to avoid duplicates:
+**When you learn something durable** — a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location of something — store it at that moment, not at end-of-session (wrap-up and context compaction both lose findings). Search first to avoid duplicates:
 
     recall memory store --summary "<one line>" --kind <fact|preference|research|decision|location|reference> \
       -k <topic> -k <topic> [--ttl <hours>] [--supersedes <id>] "<content>"
 
 Rules:
+- if your harness has builtin memory, recall is the primary store: durable findings go here even when they would also fit the builtin one — recall is shared, the builtin is not. Reserve builtin memory for harness-specific operating notes.
 - prefer small, focused memories: each should cover one self-contained finding or topic, with sharp keywords. Split a sprawling write-up into several notes — search and ranking reassemble them better than one document.
 - summary is required: one line, it is what future agents see in search results.
 - keywords: lowercase topics; use prefixes for scoping, e.g. project:myapp, task:lint.
