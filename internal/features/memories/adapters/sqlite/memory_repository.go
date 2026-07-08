@@ -1,7 +1,9 @@
 // Package sqlite implements the memories ports against the embedded
-// database. Keywords are stored space-separated with padding so exact
-// keyword filters are simple substring checks; FTS5 indexing is handled by
-// schema triggers.
+// database. Keywords are stored space-separated with padding (the source of
+// truth, feeding FTS and the read models) and mirrored into the
+// memory_keywords index table for indexed search; the mirror is maintained
+// here, in the write transaction. FTS5 indexing is handled by schema
+// triggers.
 package sqlite
 
 import (
@@ -51,6 +53,23 @@ func (r *MemoryRepository) Save(ctx context.Context, tx ddd.Transaction, memory 
 	if err != nil {
 		return fmt.Errorf("saving memory: %w", err)
 	}
+
+	// mirror keywords into the index table. OR IGNORE keeps re-saves (rate,
+	// supersede) idempotent — keywords are immutable on the aggregate
+	if len(snap.Keywords) > 0 {
+		values := make([]string, len(snap.Keywords))
+		args := make([]any, 0, len(snap.Keywords)*2)
+		for i, kw := range snap.Keywords {
+			values[i] = fmt.Sprintf("($%d, $%d)", 2*i+1, 2*i+2)
+			args = append(args, kw, string(snap.ID))
+		}
+		_, err = r.db.Resolve(tx).ExecContext(ctx,
+			"INSERT OR IGNORE INTO memory_keywords (keyword, memory_id) VALUES "+strings.Join(values, ", "),
+			args...)
+		if err != nil {
+			return fmt.Errorf("saving memory keywords: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -86,7 +105,11 @@ func (r *MemoryRepository) GetByID(ctx context.Context, tx ddd.Transaction, id d
 }
 
 func (r *MemoryRepository) Delete(ctx context.Context, tx ddd.Transaction, id domain.MemoryID) error {
-	// the memories_fts_delete trigger removes the FTS row
+	// the memories_fts_delete trigger removes the FTS row; the keyword
+	// mirror is repository-maintained, so it is cleaned here
+	if _, err := r.db.Resolve(tx).ExecContext(ctx, `DELETE FROM memory_keywords WHERE memory_id = $1`, string(id)); err != nil {
+		return fmt.Errorf("deleting memory keywords: %w", err)
+	}
 	if _, err := r.db.Resolve(tx).ExecContext(ctx, `DELETE FROM memories WHERE id = $1`, string(id)); err != nil {
 		return fmt.Errorf("deleting memory: %w", err)
 	}

@@ -63,18 +63,19 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 		where = append(where, "(m.expires_at IS NULL OR m.expires_at > "+arg(nowRFC3339())+")")
 	}
 	for _, kw := range f.Keywords {
-		where = append(where, "instr(m.keywords, "+arg(" "+kw+" ")+") > 0")
+		where = append(where, "m.id IN (SELECT memory_id FROM memory_keywords WHERE keyword = "+arg(kw)+")")
 	}
 	if len(f.KeywordsAny) > 0 {
-		// one clause per keyword, reused twice: OR-joined as the filter,
-		// summed (booleans are 0/1) as the match-count ranking signal —
-		// parenthesized because + binds tighter than > in SQLite
-		matches := make([]string, 0, len(f.KeywordsAny))
+		// index probe instead of scanning every row's keywords string: the
+		// join filters (≥1 keyword must match) and its COUNT doubles as the
+		// match-count ranking signal
+		placeholders := make([]string, 0, len(f.KeywordsAny))
 		for _, kw := range f.KeywordsAny {
-			matches = append(matches, "(instr(m.keywords, "+arg(" "+kw+" ")+") > 0)")
+			placeholders = append(placeholders, arg(kw))
 		}
-		where = append(where, "("+strings.Join(matches, " OR ")+")")
-		score += fmt.Sprintf(" + (%s) * %v", strings.Join(matches, " + "), weightKeyword)
+		from += " JOIN (SELECT memory_id, COUNT(*) AS matches FROM memory_keywords WHERE keyword IN (" +
+			strings.Join(placeholders, ", ") + ") GROUP BY memory_id) mk ON mk.memory_id = m.id"
+		score += fmt.Sprintf(" + mk.matches * %v", weightKeyword)
 	}
 	if f.Kind != "" {
 		where = append(where, "m.kind = "+arg(f.Kind))

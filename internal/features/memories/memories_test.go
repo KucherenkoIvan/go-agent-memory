@@ -253,6 +253,57 @@ func TestDelete_RemovesForGood(t *testing.T) {
 	if ftsRows != 0 {
 		t.Fatalf("fts table still has %d rows", ftsRows)
 	}
+
+	// the repository must have cleaned the keyword mirror in the same tx —
+	// stale links are how a reused id would produce false search hits
+	results, _ = svc.Search(ctx, ports.SearchFilters{KeywordsAny: []string{"prune-me"}, IncludeDead: true})
+	if len(results) != 0 {
+		t.Fatalf("keyword search hits deleted memory: %+v", results)
+	}
+	var linkRows int
+	if err := store.DB.DB().QueryRowContext(ctx, `SELECT count(*) FROM memory_keywords WHERE memory_id = $1`, string(id)).Scan(&linkRows); err != nil {
+		t.Fatal(err)
+	}
+	if linkRows != 0 {
+		t.Fatalf("keyword mirror still has %d links", linkRows)
+	}
+}
+
+func TestKeywordMirror_IdempotentAcrossResaves(t *testing.T) {
+	svc, store := setup(t)
+	ctx := context.Background()
+
+	id := mustStore(t, svc, managememories.StoreInput{
+		Content: "keyword mirror subject", Summary: "mirror notes",
+		Kind: "fact", Keywords: []string{"mirror-kw", "project:mirror"},
+	})
+
+	// rate and supersede both re-save the row; the mirror must not
+	// duplicate or drop links
+	if err := svc.Rate(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	mustStore(t, svc, managememories.StoreInput{
+		Content: "corrected subject", Summary: "mirror notes v2",
+		Kind: "fact", Keywords: []string{"mirror-kw"}, Supersedes: string(id),
+	})
+
+	var linkRows int
+	if err := store.DB.DB().QueryRowContext(ctx, `SELECT count(*) FROM memory_keywords WHERE memory_id = $1`, string(id)).Scan(&linkRows); err != nil {
+		t.Fatal(err)
+	}
+	if linkRows != 2 {
+		t.Fatalf("expected 2 links for the original, got %d", linkRows)
+	}
+
+	// default search sees only the superseding memory despite live links on both
+	results, err := svc.Search(ctx, ports.SearchFilters{KeywordsAny: []string{"mirror-kw"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Summary != "mirror notes v2" {
+		t.Fatalf("superseded leak through keyword search: %+v", results)
+	}
 }
 
 func TestRecall_AssemblesWithinBudget(t *testing.T) {
