@@ -11,7 +11,7 @@ import (
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 )
 
-const debounceDelay = 300 * time.Millisecond
+const debounceDelay = 100 * time.Millisecond
 
 func debounceCmd(seq int) tea.Cmd {
 	return tea.Tick(debounceDelay, func(time.Time) tea.Msg { return debounceMsg{seq: seq} })
