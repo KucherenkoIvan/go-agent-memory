@@ -253,6 +253,17 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	case key.Matches(msg, a.keys.Back):
+		// esc closes the topmost thing, never the TUI: expanded help
+		// first, then the active search filter
+		switch {
+		case a.help.ShowAll:
+			a.help.ShowAll = false
+		case a.list.search.Value() != "":
+			a.list.search.SetValue("")
+			return a, a.issueSearch()
+		}
+		return a, nil
 	case key.Matches(msg, a.keys.Search):
 		a.list.search.Focus()
 		return a, nil
@@ -304,6 +315,10 @@ func (a *App) updateDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := a.detail
 	switch {
 	case key.Matches(msg, a.keys.Back):
+		if a.help.ShowAll { // esc collapses help before leaving the view
+			a.help.ShowAll = false
+			return a, nil
+		}
 		a.detail = nil
 		a.mode = modeList
 	case key.Matches(msg, a.keys.RateUp), key.Matches(msg, a.keys.RateDown):

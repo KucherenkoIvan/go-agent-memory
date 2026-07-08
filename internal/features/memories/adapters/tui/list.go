@@ -41,6 +41,10 @@ func newListModel(st *styles) listModel {
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 	l.SetShowHelp(false)
+	// quitting is the app's job (q/ctrl+c in updateKey); the component's
+	// default keymap binds esc to Quit, which must not close the TUI
+	l.KeyMap.Quit.SetEnabled(false)
+	l.KeyMap.ForceQuit.SetEnabled(false)
 
 	return listModel{st: st, search: search, results: l}
 }

@@ -88,6 +88,54 @@ func TestTypingInSearch_DoesNotTriggerGlobalKeys(t *testing.T) {
 	}
 }
 
+func TestEsc_ClosesTopmostThing_NeverQuits(t *testing.T) {
+	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	// typing: esc blurs the box but keeps the filter text
+	press(t, app, "/", "a", "b", "esc")
+	if app.list.search.Focused() || app.list.search.Value() != "ab" {
+		t.Fatalf("esc must blur and keep text: focused=%v value=%q",
+			app.list.search.Focused(), app.list.search.Value())
+	}
+
+	// expanded help collapses before anything else
+	press(t, app, "?")
+	if !app.help.ShowAll {
+		t.Fatal("? must expand help")
+	}
+	press(t, app, "esc")
+	if app.help.ShowAll {
+		t.Fatal("esc must collapse help first")
+	}
+	if app.list.search.Value() != "ab" {
+		t.Fatal("collapsing help must not clear the search")
+	}
+
+	// next esc clears the filter and refreshes
+	baseline := len(fake.searches)
+	press(t, app, "esc")
+	if app.list.search.Value() != "" {
+		t.Fatalf("esc must clear the search: %q", app.list.search.Value())
+	}
+	if len(fake.searches) == baseline {
+		t.Fatal("clearing the search must refresh the list")
+	}
+
+	// bare list: esc is a no-op, never a quit (the embedded list's default
+	// keymap used to bind esc to Quit)
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if cmd != nil {
+		if _, quits := cmd().(tea.QuitMsg); quits {
+			t.Fatal("esc must not quit the TUI")
+		}
+	}
+	if app.mode != modeList {
+		t.Fatalf("esc left list mode: %v", app.mode)
+	}
+}
+
 func TestSearch_DebounceDropsStaleSeq(t *testing.T) {
 	fake := &fakeService{}
 	app := newTestApp(fake)
