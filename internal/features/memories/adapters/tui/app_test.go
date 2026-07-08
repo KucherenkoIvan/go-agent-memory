@@ -404,10 +404,23 @@ func TestSupersedeForm_SubmitsCorrection(t *testing.T) {
 	if app.form.summary.Value() != "old summary" || app.form.content.Value() != "old content" {
 		t.Fatal("form must be pre-filled from the old memory")
 	}
+	if app.form.state != formNav || app.form.summary.Focused() {
+		t.Fatal("form must open unfocused, in navigation")
+	}
 
-	// summary focused: type an amendment, then submit
+	// nothing types until a field is entered
 	press(t, app, "!")
+	if app.form.summary.Value() != "old summary" {
+		t.Fatal("runes in navigation must not edit fields")
+	}
+
+	// enter edits the highlighted field; ctrl+s asks, y saves
+	press(t, app, "enter", "!")
 	press(t, app, "ctrl+s")
+	if len(fake.stores) != 0 || app.form.confirmAct != confirmSave {
+		t.Fatal("ctrl+s must ask for confirmation before storing")
+	}
+	press(t, app, "y")
 
 	if len(fake.stores) != 1 {
 		t.Fatalf("stores: %+v", fake.stores)
@@ -430,12 +443,75 @@ func TestSupersedeForm_DomainErrorLandsOnField(t *testing.T) {
 	app := newTestApp(fake)
 	seed(app, t, fake)
 
-	press(t, app, "e", "ctrl+s")
+	press(t, app, "e", "ctrl+s", "y")
 	if app.mode != modeForm {
 		t.Fatal("failed store must stay on the form")
 	}
 	if app.form.errField != fieldSummary || app.form.fieldErr == "" {
 		t.Fatalf("error must land on summary: field=%d msg=%q", app.form.errField, app.form.fieldErr)
+	}
+	if app.form.state != formEdit || !app.form.summary.Focused() {
+		t.Fatal("error must drop the user into editing the offending field")
+	}
+}
+
+func TestForm_DiscardConfirmsOnlyWhenDirty(t *testing.T) {
+	fake := &fakeService{
+		results: []domain.SearchResult{someResult("m1", "s")},
+		memory:  &domain.MemoryReadModel{ID: "m1", Content: "c", Summary: "s", Kind: "fact", Keywords: []string{"k"}},
+	}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	// clean form: esc closes straight away
+	press(t, app, "e", "esc")
+	if app.mode != modeList {
+		t.Fatalf("clean discard must close, mode=%v", app.mode)
+	}
+
+	// dirty form: esc warns; y discards; q must not quit the app
+	press(t, app, "e", "enter", "x", "esc") // edit summary, back to nav
+	press(t, app, "esc")
+	if app.form == nil || app.form.confirmAct != confirmDiscard {
+		t.Fatal("dirty discard must ask first")
+	}
+	press(t, app, "n") // anything but y keeps editing
+	if app.form == nil || app.form.confirmAct != confirmNone {
+		t.Fatal("non-y must cancel the discard")
+	}
+	press(t, app, "q")
+	if app.form == nil || app.form.confirmAct != confirmDiscard {
+		t.Fatal("q in the form must route to discard, not quit")
+	}
+	press(t, app, "y")
+	if app.mode != modeList {
+		t.Fatalf("confirmed discard must close, mode=%v", app.mode)
+	}
+}
+
+func TestForm_FindHighlightsFields(t *testing.T) {
+	fake := &fakeService{
+		results: []domain.SearchResult{someResult("m1", "s")},
+		memory:  &domain.MemoryReadModel{ID: "m1", Content: "alpha beta", Summary: "s", Kind: "fact", Keywords: []string{"k"}},
+	}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	press(t, app, "e", "/")
+	if app.form.state != formFind || !app.form.find.Focused() {
+		t.Fatal("/ must open the find bar")
+	}
+	press(t, app, "b", "e") // types into find, not a field or global key
+	if app.form.find.Value() != "be" || app.form.summary.Value() != "s" {
+		t.Fatalf("find must capture typing: find=%q", app.form.find.Value())
+	}
+	press(t, app, "esc")
+	if app.form.state != formNav || app.form.find.Value() != "be" {
+		t.Fatal("esc leaves find, terms stay lit")
+	}
+	press(t, app, "esc")
+	if app.form.find.Value() != "" || app.mode != modeForm {
+		t.Fatal("next esc clears the find terms, stays on the form")
 	}
 }
 

@@ -212,7 +212,9 @@ func (a *App) typing() bool {
 }
 
 func (a *App) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "ctrl+c" || (msg.String() == "q" && !a.typing()) {
+	// q never hard-quits out of the editor — unsaved work goes through the
+	// form's own discard confirmation instead
+	if msg.String() == "ctrl+c" || (msg.String() == "q" && !a.typing() && a.mode != modeForm) {
 		if a.cleanup != nil {
 			a.cleanup()
 		}
@@ -401,35 +403,117 @@ func (a *App) updateDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// closeForm leaves the editor for wherever it was opened from.
+func (a *App) closeForm() {
+	returnTo := a.form.returnTo
+	a.form = nil
+	if returnTo == modeDetail && a.detail != nil {
+		a.mode = modeDetail
+	} else {
+		a.mode = modeList
+	}
+}
+
+// requestDiscard warns when edits would be lost; a clean form just closes.
+func (a *App) requestDiscard() {
+	if a.form.dirty() {
+		a.form.confirmAct = confirmDiscard
+		return
+	}
+	a.closeForm()
+}
+
 func (a *App) updateFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	f := a.form
-	switch msg.String() {
-	case "esc":
-		returnTo := f.returnTo
-		a.form = nil
-		if returnTo == modeDetail && a.detail != nil {
-			a.mode = modeDetail
-		} else {
-			a.mode = modeList
+
+	// a pending confirmation intercepts everything: y commits, all else cancels
+	if f.confirmAct != confirmNone {
+		act := f.confirmAct
+		f.confirmAct = confirmNone
+		if msg.String() != "y" {
+			return a, nil
 		}
-		return a, nil
-	case "tab":
-		f.cycleFocus(false)
-		return a, nil
-	case "shift+tab":
-		f.cycleFocus(true)
-		return a, nil
-	case "ctrl+s":
+		if act == confirmDiscard {
+			a.closeForm()
+			return a, nil
+		}
 		in, err := f.input()
 		if err != nil {
 			f.fieldErr, f.errField = err.Error(), fieldTTL
-			f.setFocus(fieldTTL)
+			f.focus = fieldTTL
+			f.startEdit()
 			return a, nil
 		}
 		a.inFlight++
 		return a, storeCmd(a.ctx, a.svc, in)
 	}
-	return a, f.update(msg)
+
+	if msg.String() == "ctrl+s" { // save from any state
+		f.confirmAct = confirmSave
+		f.stopEdit()
+		return a, nil
+	}
+
+	switch f.state {
+	case formFind:
+		switch msg.String() {
+		case "esc", "enter", "tab": // terms stay lit, back to the fields
+			f.stopEdit()
+			return a, nil
+		}
+		var cmd tea.Cmd
+		f.find, cmd = f.find.Update(msg)
+		return a, cmd
+
+	case formEdit:
+		switch msg.String() {
+		case "esc": // done typing — back to navigation
+			f.stopEdit()
+			return a, nil
+		case "tab":
+			f.move(1)
+			f.startEdit()
+			return a, nil
+		case "shift+tab":
+			f.move(-1)
+			f.startEdit()
+			return a, nil
+		}
+		return a, f.update(msg)
+
+	default: // formNav
+		switch msg.String() {
+		case "esc":
+			if f.find.Value() != "" {
+				f.find.SetValue("")
+				return a, nil
+			}
+			a.requestDiscard()
+			return a, nil
+		case "j", "down", "tab":
+			f.move(1)
+			return a, nil
+		case "k", "up", "shift+tab":
+			f.move(-1)
+			return a, nil
+		case "enter":
+			f.startEdit()
+			return a, nil
+		case "/":
+			f.state = formFind
+			f.find.Focus()
+			return a, nil
+		case "h", "l", "left", "right", " ":
+			if f.focus == fieldKind { // kind cycles in place, no edit state
+				return a, f.update(msg)
+			}
+			return a, nil
+		case "d", "q":
+			a.requestDiscard()
+			return a, nil
+		}
+		return a, nil
+	}
 }
 
 func (a *App) updateConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -497,7 +581,22 @@ func (a *App) modeHelp() help.KeyMap {
 			},
 		}
 	case modeForm:
-		return helpSet{short: []key.Binding{k.Submit, k.Back}}
+		f := a.form
+		edit := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "edit field"))
+		move := key.NewBinding(key.WithKeys("j", "k"), key.WithHelp("j/k", "fields"))
+		done := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "done editing"))
+		discard := key.NewBinding(key.WithKeys("esc", "d"), key.WithHelp("esc/d", "discard"))
+		switch {
+		case f != nil && f.confirmAct != confirmNone:
+			cancel := key.NewBinding(key.WithKeys("esc"), key.WithHelp("any key", "cancel"))
+			return helpSet{short: []key.Binding{k.Confirm, cancel}}
+		case f != nil && f.state == formEdit:
+			return helpSet{short: []key.Binding{done, k.Submit}}
+		case f != nil && f.state == formFind:
+			return helpSet{short: []key.Binding{apply, blur}}
+		default:
+			return helpSet{short: []key.Binding{move, edit, k.Find, k.Submit, discard}}
+		}
 	case modeConfirm:
 		cancel := key.NewBinding(key.WithKeys("esc"), key.WithHelp("any key", "cancel"))
 		return helpSet{short: []key.Binding{k.Confirm, cancel}}

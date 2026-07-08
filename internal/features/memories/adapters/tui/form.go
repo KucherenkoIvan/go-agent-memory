@@ -8,12 +8,13 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/usecases/managememories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 )
 
-// form field indexes — tab order.
+// form field indexes — navigation order.
 const (
 	fieldSummary = iota
 	fieldContent
@@ -21,6 +22,23 @@ const (
 	fieldKind
 	fieldTTL
 	fieldCount
+)
+
+// formState: the editor opens in navigation — nothing focused, j/k walks
+// the fields, enter starts typing, esc steps back out.
+type formState int
+
+const (
+	formNav formState = iota
+	formEdit
+	formFind
+)
+
+// confirmable pending actions, armed by save/discard and resolved by y.
+const (
+	confirmNone    = ""
+	confirmSave    = "save"
+	confirmDiscard = "discard"
 )
 
 // formModel is the supersede editor: pre-filled from the old memory, the
@@ -34,9 +52,14 @@ type formModel struct {
 	kindIdx    int
 	ttl        textinput.Model
 	focus      int
-	fieldErr   string
-	errField   int
-	returnTo   mode
+	state      formState
+	find       textinput.Model
+	confirmAct string
+	// initial values back dirty(): discard warns only when edits would be lost
+	initial  [fieldCount]string
+	fieldErr string
+	errField int
+	returnTo mode
 }
 
 func newFormModel(st *styles, from *domain.MemoryReadModel, returnTo mode, width, height int) *formModel {
@@ -55,15 +78,20 @@ func newFormModel(st *styles, from *domain.MemoryReadModel, returnTo mode, width
 	ttl.Prompt = ""
 	ttl.Placeholder = "hours, empty = never"
 
+	find := textinput.New()
+	find.Prompt = "/ "
+	find.Placeholder = "find in fields"
+
 	kindIdx := max(0, indexOfKind(from.Kind))
 
 	f := &formModel{
 		st: st, supersedes: from.ID,
 		summary: summary, content: content, keywords: keywords,
-		kindIdx: kindIdx, ttl: ttl, errField: -1, returnTo: returnTo,
+		kindIdx: kindIdx, ttl: ttl, find: find,
+		errField: -1, returnTo: returnTo,
 	}
+	f.initial = f.values()
 	f.setSize(width, height)
-	f.setFocus(fieldSummary)
 	return f
 }
 
@@ -76,22 +104,36 @@ func indexOfKind(kind string) int {
 	return 0
 }
 
+// values snapshots every field as text, for dirty comparison.
+func (f *formModel) values() [fieldCount]string {
+	return [fieldCount]string{
+		fieldSummary:  f.summary.Value(),
+		fieldContent:  f.content.Value(),
+		fieldKeywords: f.keywords.Value(),
+		fieldKind:     string(domain.Kinds[f.kindIdx]),
+		fieldTTL:      f.ttl.Value(),
+	}
+}
+
+func (f *formModel) dirty() bool {
+	return f.values() != f.initial
+}
+
 func (f *formModel) setSize(width, height int) {
 	w := max(20, width-4)
 	f.summary.Width = w
 	f.keywords.Width = w
 	f.ttl.Width = w
+	f.find.Width = w
 	f.content.SetWidth(w)
-	f.content.SetHeight(max(3, height-14)) // room for labels + other fields
+	f.content.SetHeight(max(3, height-15)) // room for labels + other fields
 }
 
-func (f *formModel) setFocus(field int) {
-	f.focus = field
-	f.summary.Blur()
-	f.content.Blur()
-	f.keywords.Blur()
-	f.ttl.Blur()
-	switch field {
+// startEdit focuses the current field's widget and enters typing state.
+func (f *formModel) startEdit() {
+	f.state = formEdit
+	f.blurAll()
+	switch f.focus {
 	case fieldSummary:
 		f.summary.Focus()
 	case fieldContent:
@@ -103,17 +145,34 @@ func (f *formModel) setFocus(field int) {
 	}
 }
 
-func (f *formModel) cycleFocus(back bool) {
-	step := 1
-	if back {
-		step = fieldCount - 1
-	}
-	f.setFocus((f.focus + step) % fieldCount)
+// stopEdit blurs everything and returns to navigation.
+func (f *formModel) stopEdit() {
+	f.state = formNav
+	f.blurAll()
+}
+
+func (f *formModel) blurAll() {
+	f.summary.Blur()
+	f.content.Blur()
+	f.keywords.Blur()
+	f.ttl.Blur()
+	f.find.Blur()
+}
+
+func (f *formModel) move(step int) {
+	f.focus = (f.focus + step + fieldCount) % fieldCount
 }
 
 // typing captures every text field; global single-letter keys stay inert.
 func (f *formModel) typing() bool {
-	return f.focus != fieldKind
+	switch f.state {
+	case formEdit:
+		return f.focus != fieldKind
+	case formFind:
+		return true
+	default:
+		return false
+	}
 }
 
 func (f *formModel) update(msg tea.Msg) tea.Cmd {
@@ -170,7 +229,8 @@ func (f *formModel) input() (managememories.StoreInput, error) {
 	}, nil
 }
 
-// applyError maps a domain error to a field-anchored message.
+// applyError maps a domain error to a field-anchored message and drops the
+// user straight into editing the offending field.
 func (f *formModel) applyError(err error) {
 	var (
 		summaryErr  *domain.InvalidSummaryError
@@ -197,19 +257,51 @@ func (f *formModel) applyError(err error) {
 		f.fieldErr, f.errField = err.Error(), -1
 	}
 	if f.errField >= 0 {
-		f.setFocus(f.errField)
+		f.focus = f.errField
+		f.startEdit()
 	}
+}
+
+func (f *formModel) findTerms() []string {
+	return strings.Fields(f.find.Value())
 }
 
 func (f *formModel) label(field int, text string) string {
 	style := f.st.blurred
+	marker := "  "
 	if f.focus == field {
 		style = f.st.focused
+		marker = f.st.focused.Render("> ")
+		if f.state == formEdit {
+			marker = f.st.focused.Render("✎ ")
+		}
 	}
+	out := marker + style.Render(text)
 	if f.errField == field && f.fieldErr != "" {
-		return style.Render(text) + "  " + f.st.errText.Render(f.fieldErr)
+		out += "  " + f.st.errText.Render(f.fieldErr)
 	}
-	return style.Render(text)
+	return out
+}
+
+// staticField renders a field's value as plain text with find hits lit —
+// widgets render only while being edited, static text is highlightable.
+func (f *formModel) staticField(value string, maxLines int) string {
+	if value == "" {
+		return f.st.dim.Render("—")
+	}
+	lines := strings.Split(value, "\n")
+	truncated := len(lines) > maxLines
+	if truncated {
+		lines = lines[:maxLines]
+	}
+	terms := f.findTerms()
+	for i, line := range lines {
+		lines[i] = highlightFuzzy(line, terms, lipgloss.NewStyle(), f.st.hit)
+	}
+	if truncated {
+		lines = append(lines, f.st.dim.Render("…"))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (f *formModel) view() string {
@@ -222,16 +314,48 @@ func (f *formModel) view() string {
 		}
 	}
 
+	editing := func(field int) bool { return f.state == formEdit && f.focus == field }
+	contentLines := f.content.Height()
+
 	var b strings.Builder
-	b.WriteString(f.st.title.Render("supersede "+f.supersedes) + "\n\n")
-	b.WriteString(f.label(fieldSummary, "summary") + "\n" + f.summary.View() + "\n\n")
-	b.WriteString(f.label(fieldContent, "content") + "\n" + f.content.View() + "\n\n")
-	b.WriteString(f.label(fieldKeywords, "keywords (comma-separated)") + "\n" + f.keywords.View() + "\n\n")
+	title := f.st.title.Render("supersede " + f.supersedes)
+	if f.dirty() {
+		title += f.st.errText.Render("  [unsaved]")
+	}
+	b.WriteString(title + "\n\n")
+
+	writeField := func(field int, label, value string, widget func() string, lines int) {
+		b.WriteString(f.label(field, label) + "\n")
+		if editing(field) {
+			b.WriteString(widget() + "\n\n")
+		} else {
+			b.WriteString(f.staticField(value, lines) + "\n\n")
+		}
+	}
+	writeField(fieldSummary, "summary", f.summary.Value(), f.summary.View, 1)
+	writeField(fieldContent, "content", f.content.Value(), f.content.View, contentLines)
+	writeField(fieldKeywords, "keywords (comma-separated)", f.keywords.Value(), f.keywords.View, 1)
 	b.WriteString(f.label(fieldKind, "kind (←/→)") + "  " + strings.Join(kinds, " ") + "\n\n")
-	b.WriteString(f.label(fieldTTL, "ttl") + "\n" + f.ttl.View() + "\n\n")
+	writeField(fieldTTL, "ttl", f.ttl.Value(), f.ttl.View, 1)
+
+	if f.state == formFind || f.find.Value() != "" {
+		b.WriteString(f.find.View() + "\n")
+	}
 	if f.errField < 0 && f.fieldErr != "" {
 		b.WriteString(f.st.errText.Render(f.fieldErr) + "\n")
 	}
-	b.WriteString(f.st.dim.Render("tab: next field · ctrl+s: store correction · esc: abandon"))
+
+	switch {
+	case f.confirmAct == confirmSave:
+		b.WriteString(f.st.errText.Render("store correction superseding " + f.supersedes + "? — y: save · any other key: cancel"))
+	case f.confirmAct == confirmDiscard:
+		b.WriteString(f.st.errText.Render("discard unsaved changes? — y: discard · any other key: keep editing"))
+	case f.state == formEdit:
+		b.WriteString(f.st.dim.Render("esc: done editing · tab: next field · ctrl+s: save"))
+	case f.state == formFind:
+		b.WriteString(f.st.dim.Render("enter/esc: back to fields"))
+	default:
+		b.WriteString(f.st.dim.Render("j/k: fields · enter: edit · /: find · ctrl+s: save · esc: discard"))
+	}
 	return b.String()
 }
