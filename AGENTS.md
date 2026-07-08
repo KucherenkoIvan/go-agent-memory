@@ -32,10 +32,10 @@ make test    # all tests — no docker, sqlite is in-memory
 make lint    # gofmt + go vet + golangci-lint — required before commit
 ```
 
-After every commit, rebuild and reinstall the local binary — the version is stamped from `git describe` at build time, so only a post-commit build carries the new revision, and the MCP config runs the installed copy:
+After every commit, reinstall the local binary — the version is stamped from `git describe` at build time, so only a post-commit build carries the new revision, and the MCP config runs the installed copy:
 
 ```sh
-make build && rm -f ~/go/bin/recall && cp bin/recall ~/go/bin/recall
+make install
 ```
 
-The `rm` first is not optional: macOS SIGKILLs an executable whose contents were overwritten in place (stale code-signature cache); removing the target lets `cp` create a fresh inode.
+It builds, warns about running `recall run` processes (they keep the old binary until their session restarts), snapshots the live DB in place (`VACUUM INTO`, last 5 kept — the new binary may migrate it on first open), and replaces `~/go/bin/recall` with the rm-then-cp dance (macOS SIGKILLs an executable whose contents were overwritten in place; a fresh inode avoids the stale code-signature cache).
