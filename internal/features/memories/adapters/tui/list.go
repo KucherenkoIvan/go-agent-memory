@@ -29,6 +29,62 @@ type listModel struct {
 	kind        string // "" = all kinds; cycled with f
 	review      bool
 	includeDead bool
+	recent      bool     // 3-day cutoff filter
+	sort        sortMode // display order; tie-breaker inside layers when searching
+	// pendingReset snaps the cursor to the top when the NEXT results land —
+	// set when the query changes (typing, toggles, clear), not on refresh
+	pendingReset bool
+	// terms is shared with the row delegate: the current search terms drive
+	// match highlighting, and emptying them clears it
+	terms *[]string
+}
+
+// sortMode orders the list. With search terms present, relevance (layer
+// order) stays primary and the mode sorts within each layer.
+type sortMode int
+
+const (
+	sortCreatedAsc sortMode = iota // earliest on top — the default
+	sortRatingDesc
+	sortRatingAsc
+	sortAccessDesc
+	sortAccessAsc
+	sortModes // count, for cycling
+)
+
+func (s sortMode) label() string {
+	switch s {
+	case sortRatingDesc:
+		return "rating↓"
+	case sortRatingAsc:
+		return "rating↑"
+	case sortAccessDesc:
+		return "reads↓"
+	case sortAccessAsc:
+		return "reads↑"
+	default:
+		return "created↑"
+	}
+}
+
+// sortResults orders a result slice by the mode, stably so upstream order
+// (relevance) survives ties.
+func sortResults(results []domain.SearchResult, mode sortMode) {
+	rating := func(r domain.SearchResult) int { return r.VotesUp - r.VotesDown }
+	slices.SortStableFunc(results, func(a, b domain.SearchResult) int {
+		switch mode {
+		case sortRatingDesc:
+			return rating(b) - rating(a)
+		case sortRatingAsc:
+			return rating(a) - rating(b)
+		case sortAccessDesc:
+			return b.AccessCount - a.AccessCount
+		case sortAccessAsc:
+			return a.AccessCount - b.AccessCount
+		default:
+			return a.CreatedAt.Compare(b.CreatedAt)
+		}
+	})
 }
 
 func newListModel(st *styles) listModel {
@@ -36,7 +92,8 @@ func newListModel(st *styles) listModel {
 	search.Placeholder = "search — terms match keywords, text, and fuzzy"
 	search.Prompt = "/ "
 
-	l := list.New(nil, itemDelegate{st: st}, 0, 0)
+	terms := &[]string{}
+	l := list.New(nil, itemDelegate{st: st, terms: terms}, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
@@ -46,7 +103,7 @@ func newListModel(st *styles) listModel {
 	l.KeyMap.Quit.SetEnabled(false)
 	l.KeyMap.ForceQuit.SetEnabled(false)
 
-	return listModel{st: st, search: search, results: l}
+	return listModel{st: st, search: search, results: l, terms: terms}
 }
 
 // spec snapshots the screen state into a query.
@@ -56,6 +113,8 @@ func (m *listModel) spec() searchSpec {
 		kind:        m.kind,
 		includeDead: m.includeDead,
 		review:      m.review,
+		recent:      m.recent,
+		sort:        m.sort,
 	}
 }
 
@@ -73,6 +132,10 @@ func (m *listModel) apply(results []domain.SearchResult) {
 		items[i] = resultItem{r: r}
 	}
 	m.results.SetItems(items)
+	if m.pendingReset {
+		m.results.ResetSelected()
+		m.pendingReset = false
+	}
 }
 
 func (m *listModel) selected() (domain.SearchResult, bool) {
@@ -115,6 +178,12 @@ func (m *listModel) cycleKind() {
 	m.kind = ring[(slices.Index(ring, m.kind)+1)%len(ring)]
 }
 
+// cycleSort rotates the display order: created↑ → rating↓ → rating↑ →
+// reads↓ → reads↑ → created↑.
+func (m *listModel) cycleSort() {
+	m.sort = (m.sort + 1) % sortModes
+}
+
 func kindStrings() []string {
 	out := make([]string, len(domain.Kinds))
 	for i, k := range domain.Kinds {
@@ -136,6 +205,12 @@ func (m *listModel) badges() string {
 	if m.includeDead {
 		parts = append(parts, m.st.dim.Render("[+dead]"))
 	}
+	if m.recent {
+		parts = append(parts, m.st.dim.Render("[recent 3d]"))
+	}
+	if m.sort != sortCreatedAsc {
+		parts = append(parts, m.st.dim.Render("[sort: "+m.sort.label()+"]"))
+	}
 	if m.review {
 		parts = append(parts, m.st.errText.Render("[review candidates]"))
 	}
@@ -143,6 +218,9 @@ func (m *listModel) badges() string {
 }
 
 func (m *listModel) view() string {
+	// the delegate highlights by whatever is in the box right now — an
+	// emptied box clears highlights on the very next frame
+	*m.terms = strings.Fields(m.search.Value())
 	header := m.search.View()
 	if badges := m.badges(); badges != "" {
 		header += "\n" + badges
@@ -153,8 +231,12 @@ func (m *listModel) view() string {
 }
 
 // itemDelegate renders what humans scan by — kind, keywords, date — loud,
-// with the summary as small secondary text underneath.
-type itemDelegate struct{ st *styles }
+// with the summary as small secondary text underneath. terms (shared with
+// the list model) drive fuzzy-hit highlighting.
+type itemDelegate struct {
+	st    *styles
+	terms *[]string
+}
 
 func (itemDelegate) Height() int  { return 2 }
 func (itemDelegate) Spacing() int { return 1 }
@@ -181,13 +263,13 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 	keywords := ansi.Truncate(strings.Join(r.Keywords, ", "),
 		max(8, width-len(date)-len(r.Kind)-6), "…")
 	first := fmt.Sprintf("%s %s  %s", d.st.kindBadge(r.Kind),
-		keywordStyle.Render(keywords), d.st.dim.Render(date))
+		highlightFuzzy(keywords, *d.terms, keywordStyle, d.st.hit), d.st.dim.Render(date))
 
 	secondary := r.Summary
 	if r.VotesUp > 0 || r.VotesDown > 0 {
 		secondary += fmt.Sprintf("  ↑%d ↓%d", r.VotesUp, r.VotesDown)
 	}
-	second := "   " + d.st.dim.Render(ansi.Truncate(secondary, width, "…"))
+	second := "   " + highlightFuzzy(ansi.Truncate(secondary, width, "…"), *d.terms, d.st.dim, d.st.hit)
 
 	_, _ = fmt.Fprintf(w, "%s%s\n%s", cursor, first, second)
 }

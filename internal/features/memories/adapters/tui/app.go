@@ -106,6 +106,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.seq != a.list.seq || a.svc == nil {
 			return a, nil // superseded by newer typing
 		}
+		a.list.pendingReset = true // typed query change → cursor to top
 		a.inFlight++
 		return a, searchCmd(a.ctx, a.svc, msg.seq, a.list.spec())
 
@@ -199,6 +200,8 @@ func (a *App) typing() bool {
 	switch a.mode {
 	case modeList:
 		return a.list.search.Focused()
+	case modeDetail:
+		return a.detail != nil && a.detail.find.Focused()
 	case modeForm:
 		return a.form != nil && a.form.typing()
 	case modeRemote:
@@ -232,15 +235,22 @@ func (a *App) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// issueSearchReset is issueSearch for query *changes*: the cursor snaps to
+// the top when the results land. Plain refresh keeps the cursor.
+func (a *App) issueSearchReset() tea.Cmd {
+	a.list.pendingReset = true
+	return a.issueSearch()
+}
+
 func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if a.list.search.Focused() {
 		switch msg.String() {
 		case "esc":
 			a.list.search.Blur()
 			return a, nil
-		case "enter":
+		case "enter", "tab": // hand focus back to the list scroll
 			a.list.search.Blur()
-			return a, a.issueSearch()
+			return a, a.issueSearchReset()
 		}
 		before := a.list.search.Value()
 		var cmd tea.Cmd
@@ -261,7 +271,17 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.help.ShowAll = false
 		case a.list.search.Value() != "":
 			a.list.search.SetValue("")
-			return a, a.issueSearch()
+			return a, a.issueSearchReset()
+		}
+		return a, nil
+	case key.Matches(msg, a.keys.HalfDown), key.Matches(msg, a.keys.HalfUp):
+		if n := len(a.list.results.Items()); n > 0 {
+			half := max(1, a.list.results.Paginator.PerPage/2)
+			if key.Matches(msg, a.keys.HalfDown) {
+				a.list.results.Select(min(n-1, a.list.results.Index()+half))
+			} else {
+				a.list.results.Select(max(0, a.list.results.Index()-half))
+			}
 		}
 		return a, nil
 	case key.Matches(msg, a.keys.Search):
@@ -289,13 +309,20 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case key.Matches(msg, a.keys.Kind):
 		a.list.cycleKind()
-		return a, a.issueSearch()
+		return a, a.issueSearchReset()
 	case key.Matches(msg, a.keys.Dead):
 		a.list.includeDead = !a.list.includeDead
-		return a, a.issueSearch()
+		return a, a.issueSearchReset()
+	case key.Matches(msg, a.keys.Recent):
+		a.list.recent = !a.list.recent
+		return a, a.issueSearchReset()
+	case key.Matches(msg, a.keys.Sort):
+		a.list.cycleSort()
+		a.toast("sort: "+a.list.sort.label(), false)
+		return a, a.issueSearchReset()
 	case key.Matches(msg, a.keys.Review):
 		a.list.review = !a.list.review
-		return a, a.issueSearch()
+		return a, a.issueSearchReset()
 	case key.Matches(msg, a.keys.Remote):
 		a.remote = newRemoteModel(a.st, a.width)
 		a.mode = modeRemote
@@ -304,8 +331,15 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, a.keys.Help):
 		a.help.ShowAll = !a.help.ShowAll
 	default:
+		prevPage := a.list.results.Paginator.Page
 		var cmd tea.Cmd
 		a.list.results, cmd = a.list.results.Update(msg)
+		// explicit paging lands the cursor at the top of the new page;
+		// j/k crossing a boundary is not paging and keeps its position
+		if page := a.list.results.Paginator.Page; page != prevPage &&
+			(key.Matches(msg, a.list.results.KeyMap.NextPage) || key.Matches(msg, a.list.results.KeyMap.PrevPage)) {
+			a.list.results.Select(page * a.list.results.Paginator.PerPage)
+		}
 		return a, cmd
 	}
 	return a, nil
@@ -313,14 +347,38 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (a *App) updateDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := a.detail
-	switch {
-	case key.Matches(msg, a.keys.Back):
-		if a.help.ShowAll { // esc collapses help before leaving the view
-			a.help.ShowAll = false
+	if d.find.Focused() {
+		switch msg.String() {
+		case "esc", "enter", "tab": // back to scrolling; terms stay lit
+			d.find.Blur()
 			return a, nil
 		}
-		a.detail = nil
-		a.mode = modeList
+		before := d.find.Value()
+		var cmd tea.Cmd
+		d.find, cmd = d.find.Update(msg)
+		if d.find.Value() != before {
+			d.refresh()
+		}
+		return a, cmd
+	}
+
+	switch {
+	case key.Matches(msg, a.keys.Back):
+		switch { // esc peels one layer, same ladder as the list
+		case a.help.ShowAll:
+			a.help.ShowAll = false
+		case d.find.Value() != "":
+			d.find.SetValue("")
+			d.refresh()
+		default:
+			a.detail = nil
+			a.mode = modeList
+		}
+		return a, nil
+	case key.Matches(msg, a.keys.Find):
+		d.find.Focus()
+		d.refresh()
+		return a, nil
 	case key.Matches(msg, a.keys.RateUp), key.Matches(msg, a.keys.RateDown):
 		a.inFlight++
 		return a, rateCmd(a.ctx, a.svc, d.m.ID, key.Matches(msg, a.keys.RateUp))
@@ -418,6 +476,41 @@ func (a *App) updateRemoteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, r.update(msg)
 }
 
+// modeHelp picks the footer bindings for the current screen, so the bottom
+// panel always shows what is actually pressable.
+func (a *App) modeHelp() help.KeyMap {
+	k := a.keys
+	blur := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "to list"))
+	apply := key.NewBinding(key.WithKeys("enter", "tab"), key.WithHelp("enter/tab", "apply + to list"))
+
+	switch a.mode {
+	case modeDetail:
+		if a.detail != nil && a.detail.find.Focused() {
+			return helpSet{short: []key.Binding{apply, blur}}
+		}
+		return helpSet{
+			short: []key.Binding{k.Back, k.Find, k.RateUp, k.Supersede, k.Delete, k.Help, k.Quit},
+			full: [][]key.Binding{
+				{k.Back, k.Find, k.Follow},
+				{k.RateUp, k.RateDown, k.Supersede, k.Delete},
+				{k.HalfDown, k.HalfUp, k.Quit},
+			},
+		}
+	case modeForm:
+		return helpSet{short: []key.Binding{k.Submit, k.Back}}
+	case modeConfirm:
+		cancel := key.NewBinding(key.WithKeys("esc"), key.WithHelp("any key", "cancel"))
+		return helpSet{short: []key.Binding{k.Confirm, cancel}}
+	case modeRemote:
+		return helpSet{short: []key.Binding{k.Submit, k.Unset, k.Back}}
+	default:
+		if a.list.search.Focused() {
+			return helpSet{short: []key.Binding{apply, blur}}
+		}
+		return k
+	}
+}
+
 func (a *App) View() string {
 	if !a.ready {
 		return "loading…"
@@ -451,5 +544,5 @@ func (a *App) View() string {
 
 	bodyH := max(1, a.height-2)
 	return lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(body) +
-		"\n" + status + "\n" + a.help.View(a.keys)
+		"\n" + status + "\n" + a.help.View(a.modeHelp())
 }

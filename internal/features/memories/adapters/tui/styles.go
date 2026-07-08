@@ -11,6 +11,7 @@ type styles struct {
 	selected lipgloss.Style
 	errText  lipgloss.Style
 	okText   lipgloss.Style
+	hit      lipgloss.Style
 	badge    map[string]lipgloss.Style
 	modal    lipgloss.Style
 	statusBg lipgloss.Style
@@ -31,6 +32,7 @@ func newStyles() *styles {
 		dim:      lipgloss.NewStyle().Foreground(dim),
 		title:    lipgloss.NewStyle().Bold(true).Foreground(accent),
 		selected: lipgloss.NewStyle().Bold(true).Foreground(accent),
+		hit:      lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.AdaptiveColor{Light: "166", Dark: "214"}),
 		errText:  lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "160", Dark: "203"}),
 		okText:   lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "28", Dark: "78"}),
 		badge: map[string]lipgloss.Style{

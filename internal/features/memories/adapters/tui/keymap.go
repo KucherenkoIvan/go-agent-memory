@@ -22,6 +22,12 @@ type keyMap struct {
 	Back      key.Binding
 	Quit      key.Binding
 	Help      key.Binding
+	HalfDown  key.Binding
+	HalfUp    key.Binding
+	Find      key.Binding
+	Confirm   key.Binding
+	Sort      key.Binding
+	Recent    key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -46,10 +52,32 @@ func newKeyMap() keyMap {
 		Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 		Help:      b("?", "help"),
+		HalfDown:  key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "half page down")),
+		HalfUp:    key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "half page up")),
+		Find:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "find in memory")),
+		Confirm:   key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "confirm")),
+		Sort:      b("s", "cycle sort"),
+		Recent:    b("t", "recent 3d"),
 	}
 }
 
-// ShortHelp/FullHelp implement help.KeyMap for the footer.
+// helpSet is an ad-hoc help.KeyMap: the footer shows different bindings per
+// screen, so each mode assembles its own set (App.modeHelp).
+type helpSet struct {
+	short []key.Binding
+	full  [][]key.Binding
+}
+
+func (h helpSet) ShortHelp() []key.Binding { return h.short }
+
+func (h helpSet) FullHelp() [][]key.Binding {
+	if h.full == nil {
+		return [][]key.Binding{h.short}
+	}
+	return h.full
+}
+
+// ShortHelp/FullHelp implement help.KeyMap for the list footer.
 func (k keyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Search, k.Enter, k.RateUp, k.Supersede, k.Delete, k.Help, k.Quit}
 }
@@ -58,7 +86,8 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Search, k.Enter, k.Refresh, k.Follow},
 		{k.RateUp, k.RateDown, k.Supersede, k.Delete},
-		{k.Kind, k.Dead, k.Review, k.Remote},
-		{k.Submit, k.Unset, k.Back, k.Quit},
+		{k.Kind, k.Dead, k.Recent, k.Sort},
+		{k.Review, k.Remote, k.HalfDown, k.HalfUp},
+		{k.Back, k.Quit},
 	}
 }

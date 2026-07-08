@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sahilm/fuzzy"
 
@@ -27,14 +28,24 @@ type searchSpec struct {
 	kind        string
 	includeDead bool
 	review      bool // review preset wants a wide fetch to filter client-side
+	recent      bool // only the last 3 days
+	sort        sortMode
 }
 
+const recentCutoff = 3 * 24 * time.Hour
+
 func (s searchSpec) base() ports.SearchFilters {
-	return ports.SearchFilters{Kind: s.kind, IncludeDead: s.includeDead}
+	f := ports.SearchFilters{Kind: s.kind, IncludeDead: s.includeDead}
+	if s.recent {
+		f.Since = time.Now().Add(-recentCutoff)
+	}
+	return f
 }
 
 // runSearch executes the layered query. Three Service calls when terms are
-// present; a single timeline fetch otherwise.
+// present; a single timeline fetch otherwise. The spec's sort mode orders
+// the timeline outright; under search it only sorts *within* each layer —
+// relevance (keywords > text > fuzzy) stays the primary order.
 func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]domain.SearchResult, error) {
 	if len(spec.terms) == 0 {
 		timeline := spec.base()
@@ -42,7 +53,12 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]do
 		if spec.review {
 			timeline.Limit = widePoolLimit
 		}
-		return svc.Search(ctx, timeline)
+		results, err := svc.Search(ctx, timeline)
+		if err != nil {
+			return nil, err
+		}
+		sortResults(results, spec.sort)
+		return results, nil
 	}
 
 	byKeyword := spec.base()
@@ -68,7 +84,11 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]do
 		return nil, err
 	}
 
-	return mergeLayers(keywordHits, textHits, fuzzyRank(pool, spec.terms)), nil
+	fuzzyHits := fuzzyRank(pool, spec.terms)
+	sortResults(keywordHits, spec.sort)
+	sortResults(textHits, spec.sort)
+	sortResults(fuzzyHits, spec.sort)
+	return mergeLayers(keywordHits, textHits, fuzzyHits), nil
 }
 
 // mergeLayers concatenates the layers dropping duplicates — earlier layers

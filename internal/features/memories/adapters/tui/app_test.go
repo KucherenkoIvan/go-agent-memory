@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -133,6 +135,178 @@ func TestEsc_ClosesTopmostThing_NeverQuits(t *testing.T) {
 	}
 	if app.mode != modeList {
 		t.Fatalf("esc left list mode: %v", app.mode)
+	}
+}
+
+func sortableResult(id string, created time.Time, votesUp, votesDown, access int) domain.SearchResult {
+	return domain.SearchResult{
+		ID: id, Summary: id, Kind: "fact", Keywords: []string{"k"},
+		Source: "test", CreatedAt: created, VotesUp: votesUp, VotesDown: votesDown,
+		AccessCount: access,
+	}
+}
+
+func TestSort_DefaultEarliestFirst_CycleReorders(t *testing.T) {
+	now := time.Now()
+	fake := &fakeService{results: []domain.SearchResult{
+		sortableResult("newest", now, 0, 0, 1),
+		sortableResult("oldest", now.Add(-48*time.Hour), 1, 0, 5),
+		sortableResult("mid", now.Add(-24*time.Hour), 5, 0, 2),
+	}}
+	app := newTestApp(fake)
+	drain(t, app, app.issueSearch())
+
+	first := func() string {
+		return app.list.results.Items()[0].(resultItem).r.ID
+	}
+	if first() != "oldest" {
+		t.Fatalf("default sort must put earliest on top, got %s", first())
+	}
+
+	press(t, app, "s") // created↑ → rating↓
+	if app.list.sort != sortRatingDesc || first() != "mid" {
+		t.Fatalf("rating↓: sort=%v first=%s", app.list.sort, first())
+	}
+	press(t, app, "s") // → rating↑
+	if first() != "newest" {
+		t.Fatalf("rating↑ must put unrated first, got %s", first())
+	}
+	press(t, app, "s") // → reads↓
+	if first() != "oldest" {
+		t.Fatalf("reads↓ must put most-read first, got %s", first())
+	}
+}
+
+func TestRecentFilter_SetsSinceCutoff(t *testing.T) {
+	fake := &fakeService{}
+	app := newTestApp(fake)
+	press(t, app, "t")
+	last := fake.searches[len(fake.searches)-1]
+	if last.Since.IsZero() || time.Since(last.Since) > 73*time.Hour {
+		t.Fatalf("recent filter must set a ~3d Since cutoff: %v", last.Since)
+	}
+	press(t, app, "t")
+	last = fake.searches[len(fake.searches)-1]
+	if !last.Since.IsZero() {
+		t.Fatal("toggling recent off must drop the cutoff")
+	}
+}
+
+func TestCursorResets_OnQueryChange_NotOnRefresh(t *testing.T) {
+	fake := &fakeService{results: []domain.SearchResult{
+		someResult("m1", "one"), someResult("m2", "two"), someResult("m3", "three"),
+	}}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	app.list.results.Select(2)
+	press(t, app, "r") // refresh keeps the cursor
+	if app.list.results.Index() != 2 {
+		t.Fatalf("refresh moved the cursor to %d", app.list.results.Index())
+	}
+	press(t, app, "f") // kind filter changes the query → cursor to top
+	if app.list.results.Index() != 0 {
+		t.Fatalf("query change must reset the cursor, got %d", app.list.results.Index())
+	}
+}
+
+func TestTabInSearch_ReturnsFocusToList(t *testing.T) {
+	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	press(t, app, "/", "x", "tab")
+	if app.list.search.Focused() {
+		t.Fatal("tab must blur the search box")
+	}
+	if app.list.search.Value() != "x" {
+		t.Fatal("tab must keep the query text")
+	}
+}
+
+func TestHalfPageMotions(t *testing.T) {
+	results := make([]domain.SearchResult, 12)
+	for i := range results {
+		results[i] = someResult(fmt.Sprintf("m%d", i), "row")
+	}
+	fake := &fakeService{results: results}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	press(t, app, "ctrl+d")
+	down := app.list.results.Index()
+	if down == 0 {
+		t.Fatal("ctrl+d must move the cursor down")
+	}
+	press(t, app, "ctrl+u")
+	if app.list.results.Index() != 0 {
+		t.Fatalf("ctrl+u must move back up, got %d", app.list.results.Index())
+	}
+}
+
+func TestHelpFooter_FollowsMode(t *testing.T) {
+	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
+	fake.memory = &domain.MemoryReadModel{
+		ID: "m1", Summary: "one", Kind: "fact", Content: "alpha beta gamma",
+		Keywords: []string{"k"}, CreatedAt: time.Now(),
+	}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	listShort := app.modeHelp().ShortHelp()
+	press(t, app, "enter")
+	if app.mode != modeDetail {
+		t.Fatalf("enter must open detail, mode=%v", app.mode)
+	}
+	detailShort := app.modeHelp().ShortHelp()
+	if len(detailShort) == 0 || len(listShort) == 0 ||
+		detailShort[0].Help().Key == listShort[0].Help().Key {
+		t.Fatal("detail footer must differ from list footer")
+	}
+}
+
+func TestDetailFind_EscLadder(t *testing.T) {
+	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
+	fake.memory = &domain.MemoryReadModel{
+		ID: "m1", Summary: "one", Kind: "fact", Content: "alpha beta gamma",
+		Keywords: []string{"k"}, CreatedAt: time.Now(),
+	}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+	press(t, app, "enter")
+
+	press(t, app, "/")
+	if !app.detail.find.Focused() {
+		t.Fatal("/ must focus the find bar")
+	}
+	press(t, app, "b", "e") // type into find, not the app keys
+	if app.detail.find.Value() != "be" || len(fake.deletes) != 0 || app.mode != modeDetail {
+		t.Fatalf("typing must stay in the find bar: %q", app.detail.find.Value())
+	}
+	press(t, app, "esc")
+	if app.detail.find.Focused() || app.detail.find.Value() != "be" {
+		t.Fatal("first esc blurs, keeps terms")
+	}
+	press(t, app, "esc")
+	if app.detail.find.Value() != "" || app.mode != modeDetail {
+		t.Fatal("second esc clears the find, stays in detail")
+	}
+	press(t, app, "esc")
+	if app.mode != modeList {
+		t.Fatal("third esc closes the view")
+	}
+}
+
+func TestHighlightFuzzy_MatchesAndClears(t *testing.T) {
+	if m := matchedBytes("alpha beta", []string{"beta"}); len(m) != 4 {
+		t.Fatalf("beta must match 4 bytes, got %v", m)
+	}
+	if m := matchedBytes("alpha beta", nil); len(m) != 0 {
+		t.Fatal("no terms must match nothing")
+	}
+	// fuzzy: scattered characters still match
+	if m := matchedBytes("memory_keywords mirror", []string{"mkm"}); len(m) == 0 {
+		t.Fatal("fuzzy subsequence must match")
 	}
 }
 
