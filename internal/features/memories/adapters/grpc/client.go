@@ -56,6 +56,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) (domai
 		Limit:       int32(filters.Limit),  //nolint:gosec // use-case caps limit
 		Offset:      int32(filters.Offset), //nolint:gosec // non-negative by use-case
 		Order:       filters.Order,
+		SkipTotal:   filters.SkipTotal,
 		IncludeDead: filters.IncludeDead,
 	})
 	if err != nil {

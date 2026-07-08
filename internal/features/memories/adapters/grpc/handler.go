@@ -84,6 +84,7 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 		Limit:       int(req.GetLimit()),
 		Offset:      int(req.GetOffset()),
 		Order:       req.GetOrder(),
+		SkipTotal:   req.GetSkipTotal(),
 		IncludeDead: req.GetIncludeDead(),
 	})
 	if err != nil {

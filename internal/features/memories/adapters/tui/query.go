@@ -80,6 +80,7 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) (resu
 	byKeyword := spec.base()
 	byKeyword.KeywordsAny = spec.terms
 	byKeyword.Limit = layerLimit
+	byKeyword.SkipTotal = true
 	keywordPage, err := svc.Search(ctx, byKeyword)
 	if err != nil {
 		return nil, 0, err
@@ -89,6 +90,7 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) (resu
 	byText := spec.base()
 	byText.Query = strings.Join(spec.terms, " ")
 	byText.Limit = layerLimit
+	byText.SkipTotal = true
 	textPage, err := svc.Search(ctx, byText)
 	if err != nil {
 		return nil, 0, err
@@ -97,6 +99,7 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) (resu
 
 	widePool := spec.base()
 	widePool.Limit = widePoolLimit
+	widePool.SkipTotal = true
 	poolPage, err := svc.Search(ctx, widePool)
 	if err != nil {
 		return nil, 0, err

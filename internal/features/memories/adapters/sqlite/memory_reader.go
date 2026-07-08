@@ -95,8 +95,12 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 	if len(where) > 0 {
 		whereSQL = strings.Join(where, " AND ")
 	}
-	query := fmt.Sprintf(`SELECT %s, %s AS snippet, (%s) AS score, (SELECT COUNT(*) FROM %s WHERE %s) AS total FROM %s WHERE %s`,
-		searchColumns, snippet, score, from, whereSQL, from, whereSQL)
+	total := "0"
+	if !f.SkipTotal {
+		total = fmt.Sprintf("(SELECT COUNT(*) FROM %s WHERE %s)", from, whereSQL)
+	}
+	query := fmt.Sprintf(`SELECT %s, %s AS snippet, (%s) AS score, %s AS total FROM %s WHERE %s`,
+		searchColumns, snippet, score, total, from, whereSQL)
 	// m.id tiebreak keeps every order total, so OFFSET pages are stable —
 	// equal-score rows can never duplicate or vanish across pages
 	query += " ORDER BY " + orderBy(f.Order) + ", m.id LIMIT " + arg(f.Limit)

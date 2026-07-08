@@ -83,6 +83,7 @@ func (q *RecallQuery) Execute(ctx context.Context, keywords []string, text strin
 		Query:       text,
 		KeywordsAny: domain.NormalizeKeywords(keywords),
 		Limit:       recallSearchLimit,
+		SkipTotal:   true, // pack never shows counts
 	})
 	if err != nil {
 		return "", err

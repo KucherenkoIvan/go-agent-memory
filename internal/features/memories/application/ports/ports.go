@@ -36,6 +36,9 @@ type SearchFilters struct {
 	// Order overrides relevance ranking with a named display order; empty
 	// keeps the score ranking. See the Order* constants.
 	Order string
+	// SkipTotal skips the exact match count (Total comes back 0) — it
+	// costs a second filter evaluation; callers that discard it opt out.
+	SkipTotal bool
 	// IncludeDead includes superseded and expired memories.
 	IncludeDead bool
 }
