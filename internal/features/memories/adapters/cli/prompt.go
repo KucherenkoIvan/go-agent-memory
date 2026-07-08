@@ -11,7 +11,7 @@ A shared memory survives across sessions, models, and harnesses. Use it via the 
     recall memory pack <topic> <topic>...        # ranked memories as one block
     recall memory search <topic>... [--text "…"] # or browse summaries first
 
-Keywords OR-match in both: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. --text layers a full-text query over the keyword results; --and (search only) requires every keyword when you need to narrow hard.
+Keywords OR-match in both: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. --text layers a full-text query over the keyword results; --and (search only) requires every keyword when you need to narrow hard. Page big result sets with --offset (stable order); --order swaps relevance for a display order (created_asc|created_desc|rating_asc|rating_desc|reads_asc|reads_desc).
 
 Search again mid-session when the work shifts to a new problem — the opening pack does not cover topics that emerged later.
 

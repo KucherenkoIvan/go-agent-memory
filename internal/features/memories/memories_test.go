@@ -104,6 +104,48 @@ func TestStoreSearchGet_EndToEnd(t *testing.T) {
 	}
 }
 
+func TestSearch_OrderAndOffset_PaginateStably(t *testing.T) {
+	svc, _ := setup(t)
+	ctx := context.Background()
+
+	for _, name := range []string{"first", "second", "third"} {
+		mustStore(t, svc, managememories.StoreInput{
+			Content: name + " body", Summary: name + " notes",
+			Kind: "fact", Keywords: []string{"paging"},
+		})
+	}
+
+	page := func(offset int) []domain.SearchResult {
+		results, err := svc.Search(ctx, ports.SearchFilters{
+			Order: ports.OrderCreatedAsc, Limit: 2, Offset: offset,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return results
+	}
+
+	one, two := page(0), page(2)
+	if len(one) != 2 || len(two) != 1 {
+		t.Fatalf("pages: %d + %d", len(one), len(two))
+	}
+	if one[0].Summary != "first notes" || one[1].Summary != "second notes" || two[0].Summary != "third notes" {
+		t.Fatalf("created_asc pages out of order: %v %v", one, two)
+	}
+
+	desc, err := svc.Search(ctx, ports.SearchFilters{Order: ports.OrderCreatedDesc, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(desc) != 1 || desc[0].Summary != "third notes" {
+		t.Fatalf("created_desc must lead with the newest: %+v", desc)
+	}
+
+	if _, err := svc.Search(ctx, ports.SearchFilters{Order: "bogus"}); err == nil {
+		t.Fatal("invalid order must be rejected")
+	}
+}
+
 func TestRating_DrivesRanking(t *testing.T) {
 	svc, _ := setup(t)
 	ctx := context.Background()

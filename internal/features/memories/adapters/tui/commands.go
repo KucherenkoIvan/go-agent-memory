@@ -18,13 +18,29 @@ func debounceCmd(seq int) tea.Cmd {
 	return tea.Tick(debounceDelay, func(time.Time) tea.Msg { return debounceMsg{seq: seq} })
 }
 
-func searchCmd(ctx context.Context, svc memories.Service, seq int, spec searchSpec) tea.Cmd {
+// fetchMode tells the update loop what to do with arriving results.
+type fetchMode int
+
+const (
+	fetchReplace fetchMode = iota // fresh query — swap the list
+	fetchAppend                   // timeline page — extend the list
+	fetchGrow                     // deeper layered search — re-merge, keep cursor
+)
+
+func searchCmd(ctx context.Context, svc memories.Service, seq int, spec searchSpec, fetch fetchMode) tea.Cmd {
+	expected := spec.limit
+	if expected <= 0 {
+		expected = layerFetchLimit
+		if spec.review {
+			expected = widePoolLimit
+		}
+	}
 	return func() tea.Msg {
 		results, err := runSearch(ctx, svc, spec)
 		if err != nil {
 			return errMsg{op: "search", err: err}
 		}
-		return searchDoneMsg{seq: seq, results: results}
+		return searchDoneMsg{seq: seq, results: results, fetch: fetch, expected: expected}
 	}
 }
 

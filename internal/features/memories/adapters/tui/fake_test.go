@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
@@ -38,12 +39,39 @@ func (f *fakeService) Store(_ context.Context, in managememories.StoreInput) (do
 	return "new-id", nil
 }
 
+// Search honors Order, Offset, and Limit like the real reader — the TUI's
+// pagination and sorting lean on those contract semantics.
 func (f *fakeService) Search(_ context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
 	f.searches = append(f.searches, filters)
 	if f.searchErr != nil {
 		return nil, f.searchErr
 	}
-	return f.results, nil
+	results := slices.Clone(f.results)
+	rating := func(r domain.SearchResult) int { return r.VotesUp - r.VotesDown }
+	switch filters.Order {
+	case ports.OrderCreatedAsc:
+		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return a.CreatedAt.Compare(b.CreatedAt) })
+	case ports.OrderCreatedDesc:
+		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return b.CreatedAt.Compare(a.CreatedAt) })
+	case ports.OrderRatingAsc:
+		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return rating(a) - rating(b) })
+	case ports.OrderRatingDesc:
+		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return rating(b) - rating(a) })
+	case ports.OrderReadsAsc:
+		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return a.AccessCount - b.AccessCount })
+	case ports.OrderReadsDesc:
+		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return b.AccessCount - a.AccessCount })
+	}
+	if filters.Offset > 0 {
+		if filters.Offset >= len(results) {
+			return nil, nil
+		}
+		results = results[filters.Offset:]
+	}
+	if filters.Limit > 0 && len(results) > filters.Limit {
+		results = results[:filters.Limit]
+	}
+	return results, nil
 }
 
 func (f *fakeService) Get(_ context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error) {

@@ -32,6 +32,10 @@ func (q *SearchQuery) Execute(ctx context.Context, filters ports.SearchFilters) 
 		filters.Limit = defaultSearchLimit
 	}
 	filters.Limit = min(filters.Limit, maxSearchLimit)
+	filters.Offset = max(filters.Offset, 0)
+	if !ports.ValidOrder(filters.Order) {
+		return nil, fmt.Errorf("invalid_order: %q — one of created_asc, created_desc, rating_asc, rating_desc, reads_asc, reads_desc, or empty for relevance", filters.Order)
+	}
 	filters.Keywords = domain.NormalizeKeywords(filters.Keywords)
 	filters.KeywordsAny = domain.NormalizeKeywords(filters.KeywordsAny)
 	return q.reader.Search(ctx, ddd.NoTransaction, filters)

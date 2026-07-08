@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories"
+	"github.com/KucherenkoIvan/go-agent-memory/internal/shared/infra/remotecfg"
 )
 
 type mode int
@@ -52,10 +54,21 @@ type App struct {
 func newApp(ctx context.Context, svc memories.Service, cleanup func(), connect Connect, version string) *App {
 	st := newStyles()
 	spin := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	return &App{
+	app := &App{
 		ctx: ctx, svc: svc, cleanup: cleanup, connect: connect, version: version,
 		list: newListModel(st), spin: spin, keys: newKeyMap(), help: help.New(), st: st,
 	}
+	app.list.remoteAddr = resolvedRemoteAddr()
+	return app
+}
+
+// resolvedRemoteAddr names the remote endpoint this session talks to, "" for
+// local — the list header badges it so a remote session is unmistakable.
+func resolvedRemoteAddr() string {
+	if cfg, err := remotecfg.Resolve(); err == nil && cfg != nil {
+		return cfg.Addr
+	}
+	return ""
 }
 
 func (a *App) Init() tea.Cmd {
@@ -63,14 +76,55 @@ func (a *App) Init() tea.Cmd {
 }
 
 // issueSearch runs the list's current filters immediately (init, refresh,
-// toggles). Debounced typing goes through debounceMsg instead.
+// toggles). Debounced typing goes through debounceMsg instead. Every fresh
+// query restarts pagination.
 func (a *App) issueSearch() tea.Cmd {
 	if a.svc == nil {
 		return nil
 	}
 	a.list.seq++
+	a.list.exhausted = false
+	a.list.pendingMore = false
+	a.list.growLimit = 0
 	a.inFlight++
-	return searchCmd(a.ctx, a.svc, a.list.seq, a.list.spec())
+	return searchCmd(a.ctx, a.svc, a.list.seq, a.list.spec(), fetchReplace)
+}
+
+// maybeLoadMore fetches the next chunk when the cursor nears the end of
+// the loaded rows: the timeline pages by offset (server-side stable
+// order), a layered search deepens its per-layer limit and re-merges.
+func (a *App) maybeLoadMore() tea.Cmd {
+	l := &a.list
+	items := l.results.Items()
+	if a.svc == nil || l.exhausted || l.pendingMore || len(items) == 0 {
+		return nil
+	}
+	if l.results.Index() < len(items)-max(1, l.results.Paginator.PerPage) {
+		return nil
+	}
+	spec := l.spec()
+	if spec.review { // curation preset is a bounded wide fetch, no paging
+		return nil
+	}
+	if len(spec.terms) == 0 {
+		spec.offset = len(items)
+		l.pendingMore = true
+		a.inFlight++
+		return searchCmd(a.ctx, a.svc, l.seq, spec, fetchAppend)
+	}
+	if l.growLimit == 0 {
+		l.growLimit = layerFetchLimit
+	}
+	if l.growLimit >= maxLayerLimit {
+		l.exhausted = true
+		a.toast("deepest search page — refine the query to see more", false)
+		return nil
+	}
+	l.growLimit = min(maxLayerLimit, l.growLimit+layerFetchLimit)
+	spec.limit = l.growLimit
+	l.pendingMore = true
+	a.inFlight++
+	return searchCmd(a.ctx, a.svc, l.seq, spec, fetchGrow)
 }
 
 func (a *App) settle() { a.inFlight = max(0, a.inFlight-1) }
@@ -107,13 +161,37 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil // superseded by newer typing
 		}
 		a.list.pendingReset = true // typed query change → cursor to top
+		a.list.exhausted = false
+		a.list.pendingMore = false
+		a.list.growLimit = 0
 		a.inFlight++
-		return a, searchCmd(a.ctx, a.svc, msg.seq, a.list.spec())
+		return a, searchCmd(a.ctx, a.svc, msg.seq, a.list.spec(), fetchReplace)
 
 	case searchDoneMsg:
 		a.settle()
-		if msg.seq == a.list.seq {
+		a.list.pendingMore = false
+		if msg.seq != a.list.seq {
+			return a, nil // stale query
+		}
+		switch msg.fetch {
+		case fetchAppend:
+			before := len(a.list.results.Items())
+			a.list.appendResults(msg.results)
+			a.list.exhausted = len(msg.results) < msg.expected ||
+				len(a.list.results.Items()) == before
+		case fetchGrow:
+			before := len(a.list.results.Items())
+			selected := a.list.selectedID()
 			a.list.apply(msg.results)
+			a.list.selectByID(selected)
+			a.list.exhausted = len(msg.results) <= before // no progress = done
+		default:
+			a.list.apply(msg.results)
+			// only the timeline can be exhausted on the first page; a
+			// layered search merges up to 3 fetches
+			if len(strings.Fields(a.list.search.Value())) == 0 {
+				a.list.exhausted = len(msg.results) < msg.expected
+			}
 		}
 		return a, nil
 
@@ -165,6 +243,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.remote != nil {
 			a.remote.broken = false
 		}
+		a.list.remoteAddr = resolvedRemoteAddr()
 		a.toast("connected", false)
 		a.mode = modeList
 		return a, a.issueSearch()
@@ -285,7 +364,7 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				a.list.results.Select(max(0, a.list.results.Index()-half))
 			}
 		}
-		return a, nil
+		return a, a.maybeLoadMore()
 	case key.Matches(msg, a.keys.Search):
 		a.list.search.Focus()
 		return a, nil
@@ -342,7 +421,7 @@ func (a *App) updateListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			(key.Matches(msg, a.list.results.KeyMap.NextPage) || key.Matches(msg, a.list.results.KeyMap.PrevPage)) {
 			a.list.results.Select(page * a.list.results.Paginator.PerPage)
 		}
-		return a, cmd
+		return a, tea.Batch(cmd, a.maybeLoadMore())
 	}
 	return a, nil
 }

@@ -248,6 +248,42 @@ func TestHalfPageMotions(t *testing.T) {
 	}
 }
 
+func TestTimeline_PaginatesToTheEnd(t *testing.T) {
+	// 70 rows, page size 50: reaching the end must fetch the remaining 20
+	// by offset and then mark the query exhausted
+	now := time.Now()
+	results := make([]domain.SearchResult, 70)
+	for i := range results {
+		results[i] = sortableResult(fmt.Sprintf("m%02d", i), now.Add(time.Duration(i)*time.Minute), 0, 0, 0)
+	}
+	fake := &fakeService{results: results}
+	app := newTestApp(fake)
+	drain(t, app, app.issueSearch())
+
+	if n := len(app.list.results.Items()); n != layerFetchLimit {
+		t.Fatalf("first page must be %d rows, got %d", layerFetchLimit, n)
+	}
+	if app.list.exhausted {
+		t.Fatal("a full first page must not be exhausted")
+	}
+
+	press(t, app, "G") // jump to end → triggers load-more
+	if n := len(app.list.results.Items()); n != 70 {
+		t.Fatalf("end of page must append the rest: %d rows", n)
+	}
+	last := fake.searches[len(fake.searches)-1]
+	if last.Offset != layerFetchLimit || last.Order != "created_asc" {
+		t.Fatalf("second page must fetch by offset with server order: %+v", last)
+	}
+
+	press(t, app, "G")
+	baseline := len(fake.searches)
+	press(t, app, "G")
+	if len(fake.searches) != baseline {
+		t.Fatal("exhausted timeline must stop fetching")
+	}
+}
+
 func TestHelpFooter_FollowsMode(t *testing.T) {
 	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
 	fake.memory = &domain.MemoryReadModel{

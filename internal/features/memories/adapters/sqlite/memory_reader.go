@@ -91,7 +91,12 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY score DESC LIMIT " + arg(f.Limit)
+	// m.id tiebreak keeps every order total, so OFFSET pages are stable —
+	// equal-score rows can never duplicate or vanish across pages
+	query += " ORDER BY " + orderBy(f.Order) + ", m.id LIMIT " + arg(f.Limit)
+	if f.Offset > 0 {
+		query += " OFFSET " + arg(f.Offset)
+	}
 
 	rows, err := r.db.Resolve(tx).QueryContext(ctx, query, args...)
 	if err != nil {
@@ -168,6 +173,28 @@ func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domai
 		model.AccessCount++
 	}
 	return &model, nil
+}
+
+// orderBy maps a validated ports.Order* value to its SQL clause; empty is
+// the relevance ranking. The use-case rejects unknown values, so the
+// default arm never sees user input.
+func orderBy(order string) string {
+	switch order {
+	case ports.OrderCreatedAsc:
+		return "m.created_at ASC"
+	case ports.OrderCreatedDesc:
+		return "m.created_at DESC"
+	case ports.OrderRatingAsc:
+		return "(m.votes_up - m.votes_down) ASC"
+	case ports.OrderRatingDesc:
+		return "(m.votes_up - m.votes_down) DESC"
+	case ports.OrderReadsAsc:
+		return "m.access_count ASC"
+	case ports.OrderReadsDesc:
+		return "m.access_count DESC"
+	default:
+		return "score DESC"
+	}
 }
 
 // ftsQuery turns free text into an FTS5 query: each term quoted (so user

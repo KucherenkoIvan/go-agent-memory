@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 )
 
@@ -34,6 +35,14 @@ type listModel struct {
 	// pendingReset snaps the cursor to the top when the NEXT results land —
 	// set when the query changes (typing, toggles, clear), not on refresh
 	pendingReset bool
+	// pagination: exhausted means the store has no more rows for this
+	// query; pendingMore guards against double fetches; growLimit is the
+	// current per-layer depth of a layered search
+	exhausted   bool
+	pendingMore bool
+	growLimit   int
+	// remoteAddr, when set, badges the session as connected to a server
+	remoteAddr string
 	// terms is shared with the row delegate: the current search terms drive
 	// match highlighting, and emptying them clears it
 	terms *[]string
@@ -52,6 +61,25 @@ const (
 	sortAccessAsc
 	sortModes // count, for cycling
 )
+
+// order maps the mode to the reader's server-side display order — stable
+// ordering is what makes offset pagination possible.
+func (s sortMode) order() string {
+	switch s {
+	case sortCreatedDesc:
+		return ports.OrderCreatedDesc
+	case sortRatingDesc:
+		return ports.OrderRatingDesc
+	case sortRatingAsc:
+		return ports.OrderRatingAsc
+	case sortAccessDesc:
+		return ports.OrderReadsDesc
+	case sortAccessAsc:
+		return ports.OrderReadsAsc
+	default:
+		return ports.OrderCreatedAsc
+	}
+}
 
 func (s sortMode) label() string {
 	switch s {
@@ -90,11 +118,6 @@ func cmpMode(mode sortMode) func(a, b domain.SearchResult) int {
 			return a.CreatedAt.Compare(b.CreatedAt)
 		}
 	}
-}
-
-// sortResults orders a result slice by the mode alone (timeline view).
-func sortResults(results []domain.SearchResult, mode sortMode) {
-	slices.SortStableFunc(results, cmpMode(mode))
 }
 
 // sortLayer keeps relevance (higher first) as the primary order and lets
@@ -164,6 +187,42 @@ func (m *listModel) apply(results []domain.SearchResult) {
 	}
 }
 
+// appendResults extends the list with the next timeline page; ids already
+// shown are skipped (offset pages are disjoint, this is belt-and-braces).
+func (m *listModel) appendResults(results []domain.SearchResult) {
+	seen := make(map[string]bool, len(m.results.Items()))
+	for _, it := range m.results.Items() {
+		if item, ok := it.(resultItem); ok {
+			seen[item.r.ID] = true
+		}
+	}
+	items := m.results.Items()
+	for _, r := range results {
+		if !seen[r.ID] {
+			items = append(items, resultItem{r: r})
+		}
+	}
+	m.results.SetItems(items)
+}
+
+func (m *listModel) selectedID() string {
+	if r, ok := m.selected(); ok {
+		return r.ID
+	}
+	return ""
+}
+
+// selectByID restores the cursor after a re-merge; unknown ids keep the
+// current position.
+func (m *listModel) selectByID(id string) {
+	for i, it := range m.results.Items() {
+		if item, ok := it.(resultItem); ok && item.r.ID == id {
+			m.results.Select(i)
+			return
+		}
+	}
+}
+
 func (m *listModel) selected() (domain.SearchResult, bool) {
 	item, ok := m.results.SelectedItem().(resultItem)
 	if !ok {
@@ -225,6 +284,9 @@ func (m *listModel) setSize(width, height int) {
 
 func (m *listModel) badges() string {
 	var parts []string
+	if m.remoteAddr != "" {
+		parts = append(parts, m.st.accent.Render("[remote "+m.remoteAddr+"]"))
+	}
 	if m.kind != "" {
 		parts = append(parts, m.st.kindBadge(m.kind))
 	}

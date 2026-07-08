@@ -20,6 +20,9 @@ import (
 const (
 	layerFetchLimit = 50
 	widePoolLimit   = 200
+	// maxLayerLimit mirrors the application's search cap — asking deeper
+	// gets clamped anyway, so layered pagination stops here
+	maxLayerLimit = 200
 )
 
 // searchSpec is everything the list screen's state contributes to a query.
@@ -30,6 +33,10 @@ type searchSpec struct {
 	review      bool // review preset wants a wide fetch to filter client-side
 	recent      bool // only the last 3 days
 	sort        sortMode
+	// pagination: offset pages the timeline (server-side order makes it
+	// stable); limit deepens the layered search fetches
+	offset int
+	limit  int
 }
 
 const recentCutoff = 3 * 24 * time.Hour
@@ -44,26 +51,29 @@ func (s searchSpec) base() ports.SearchFilters {
 
 // runSearch executes the layered query. Three Service calls when terms are
 // present; a single timeline fetch otherwise. The spec's sort mode orders
-// the timeline outright; under search it only sorts *within* each layer —
-// relevance (keywords > text > fuzzy) stays the primary order.
+// the timeline server-side (stable, so offset pagination works); under
+// search it only sorts *within* each layer — relevance (keywords > text >
+// fuzzy) stays the primary order.
 func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]domain.SearchResult, error) {
+	layerLimit := layerFetchLimit
+	if spec.limit > 0 {
+		layerLimit = spec.limit
+	}
+
 	if len(spec.terms) == 0 {
 		timeline := spec.base()
-		timeline.Limit = layerFetchLimit
+		timeline.Limit = layerLimit
+		timeline.Offset = spec.offset
+		timeline.Order = spec.sort.order()
 		if spec.review {
 			timeline.Limit = widePoolLimit
 		}
-		results, err := svc.Search(ctx, timeline)
-		if err != nil {
-			return nil, err
-		}
-		sortResults(results, spec.sort)
-		return results, nil
+		return svc.Search(ctx, timeline)
 	}
 
 	byKeyword := spec.base()
 	byKeyword.KeywordsAny = spec.terms
-	byKeyword.Limit = layerFetchLimit
+	byKeyword.Limit = layerLimit
 	keywordHits, err := svc.Search(ctx, byKeyword)
 	if err != nil {
 		return nil, err
@@ -71,7 +81,7 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]do
 
 	byText := spec.base()
 	byText.Query = strings.Join(spec.terms, " ")
-	byText.Limit = layerFetchLimit
+	byText.Limit = layerLimit
 	textHits, err := svc.Search(ctx, byText)
 	if err != nil {
 		return nil, err

@@ -136,9 +136,9 @@ func storeCmd(opts *options, withService func(func(*cobra.Command, []string, mem
 
 func searchCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	var (
-		text, kind, since, until string
-		limit                    int
-		all, and                 bool
+		text, kind, since, until, order string
+		limit, offset                   int
+		all, and                        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "search [keyword]...",
@@ -148,9 +148,14 @@ func searchCmd(opts *options, withService func(func(*cobra.Command, []string, me
 Positional arguments are keywords: any may match, and every additional
 match boosts a memory's rank (the same semantics pack uses). --text
 layers a full-text query over the keyword results. No arguments at all
-returns the recent timeline.`,
+returns the recent timeline.
+
+--offset pages through results (ordering is stable — pages never
+duplicate or drop rows); --order swaps relevance ranking for a display
+order: created_asc, created_desc, rating_asc, rating_desc, reads_asc,
+reads_desc.`,
 		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
-			filters := ports.SearchFilters{Query: text, Kind: kind, Limit: limit, IncludeDead: all}
+			filters := ports.SearchFilters{Query: text, Kind: kind, Limit: limit, Offset: offset, Order: order, IncludeDead: all}
 			if and {
 				filters.Keywords = args
 			} else {
@@ -176,6 +181,8 @@ returns the recent timeline.`,
 	cmd.Flags().StringVar(&since, "since", "", "created after (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().StringVar(&until, "until", "", "created before (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 0, "max results (default 20)")
+	cmd.Flags().IntVar(&offset, "offset", 0, "ranked rows to skip — pagination")
+	cmd.Flags().StringVar(&order, "order", "", "display order instead of relevance: created_asc|created_desc|rating_asc|rating_desc|reads_asc|reads_desc")
 	cmd.Flags().BoolVar(&all, "all", false, "include superseded and expired")
 	return cmd
 }

@@ -16,6 +16,10 @@ type (
 	searchDoneMsg struct {
 		seq     int
 		results []domain.SearchResult
+		// fetch distinguishes a fresh query from pagination follow-ups.
+		fetch fetchMode
+		// expected is the requested row count — fewer back means exhausted.
+		expected int
 	}
 
 	memoryLoadedMsg struct {

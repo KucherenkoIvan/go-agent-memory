@@ -40,7 +40,7 @@ Prefer small, focused memories: each should cover one self-contained finding or 
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "search_memory",
-		Description: "Search memories by keywords, full-text query, kind, and dates. Keywords OR-match and boost rank, like pack — set and=true to require every keyword when narrowing hard. Returns ranked summaries — use get_memory for full content. Reach for this on your own whenever a past agent might have learned something relevant — including mid-session, when the work shifts to a topic the opening pack didn't cover.",
+		Description: "Search memories by keywords, full-text query, kind, and dates. Keywords OR-match and boost rank, like pack — set and=true to require every keyword when narrowing hard. Returns ranked summaries — use get_memory for full content. Page with offset (ordering is stable); order swaps relevance ranking for a display order (created_asc, created_desc, rating_asc, rating_desc, reads_asc, reads_desc). Reach for this on your own whenever a past agent might have learned something relevant — including mid-session, when the work shifts to a topic the opening pack didn't cover.",
 	}, searchHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -107,6 +107,8 @@ type searchIn struct {
 	Since    string   `json:"since,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD"`
 	Until    string   `json:"until,omitempty" jsonschema:"RFC3339 or YYYY-MM-DD"`
 	Limit    int      `json:"limit,omitempty" jsonschema:"default 20"`
+	Offset   int      `json:"offset,omitempty" jsonschema:"ranked rows to skip — pagination; ordering is stable across pages"`
+	Order    string   `json:"order,omitempty" jsonschema:"display order instead of relevance: created_asc|created_desc|rating_asc|rating_desc|reads_asc|reads_desc"`
 	All      bool     `json:"all,omitempty" jsonschema:"include superseded and expired memories"`
 }
 
@@ -126,7 +128,8 @@ func searchHandler(svc memories.Service) sdk.ToolHandlerFor[searchIn, searchOut]
 		}
 		filters := ports.SearchFilters{
 			Query: in.Query, Kind: in.Kind,
-			Since: since, Until: until, Limit: in.Limit, IncludeDead: in.All,
+			Since: since, Until: until, Limit: in.Limit,
+			Offset: in.Offset, Order: in.Order, IncludeDead: in.All,
 		}
 		if in.And {
 			filters.Keywords = in.Keywords

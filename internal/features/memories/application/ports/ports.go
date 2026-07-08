@@ -30,8 +30,34 @@ type SearchFilters struct {
 	Since       time.Time
 	Until       time.Time
 	Limit       int
+	// Offset skips ranked rows for pagination; ordering is stable (id
+	// tiebreak), so pages never duplicate or drop rows.
+	Offset int
+	// Order overrides relevance ranking with a named display order; empty
+	// keeps the score ranking. See the Order* constants.
+	Order string
 	// IncludeDead includes superseded and expired memories.
 	IncludeDead bool
+}
+
+// Search orders — SearchFilters.Order values. Empty = relevance ranking.
+const (
+	OrderCreatedAsc  = "created_asc"
+	OrderCreatedDesc = "created_desc"
+	OrderRatingAsc   = "rating_asc"
+	OrderRatingDesc  = "rating_desc"
+	OrderReadsAsc    = "reads_asc"
+	OrderReadsDesc   = "reads_desc"
+)
+
+// ValidOrder reports whether order names a supported display order.
+func ValidOrder(order string) bool {
+	switch order {
+	case "", OrderCreatedAsc, OrderCreatedDesc, OrderRatingAsc,
+		OrderRatingDesc, OrderReadsAsc, OrderReadsDesc:
+		return true
+	}
+	return false
 }
 
 // MemoryReader serves the queries: ranked search and full reads.

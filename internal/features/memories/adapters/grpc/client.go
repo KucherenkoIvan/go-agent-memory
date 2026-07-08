@@ -53,7 +53,9 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) ([]dom
 	resp, err := c.rpc.Search(c.auth(ctx), &recallv1.SearchRequest{
 		Query: filters.Query, Keywords: filters.Keywords, KeywordsAny: filters.KeywordsAny,
 		Kind: filters.Kind, Since: since, Until: until,
-		Limit:       int32(filters.Limit), //nolint:gosec // use-case caps limit
+		Limit:       int32(filters.Limit),  //nolint:gosec // use-case caps limit
+		Offset:      int32(filters.Offset), //nolint:gosec // non-negative by use-case
+		Order:       filters.Order,
 		IncludeDead: filters.IncludeDead,
 	})
 	if err != nil {
