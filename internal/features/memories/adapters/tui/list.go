@@ -285,7 +285,7 @@ func kindStrings() []string {
 
 func (m *listModel) setSize(width, height int) {
 	m.search.Width = max(10, width-4)
-	m.results.SetSize(width, max(1, height-3)) // search line + badges + spacer
+	m.results.SetSize(width, max(1, height-4)) // search + badges + spacer + paginator
 }
 
 func (m *listModel) badges() string {
@@ -308,15 +308,12 @@ func (m *listModel) badges() string {
 	if m.review {
 		parts = append(parts, m.st.errText.Render("[review candidates]"))
 	}
-	if pg := m.pageInfo(); pg != "" {
-		parts = append(parts, m.st.dim.Render(pg))
-	}
 	return strings.Join(parts, " ")
 }
 
-// pageInfo renders numeric pagination: exact page count when the store
-// reported a total, loaded count (with a trailing + while more may exist)
-// otherwise.
+// pageInfo is the numeric paginator: current/total pages, exact when the
+// store reported a match total, over loaded rows (with a trailing + while
+// more may exist) otherwise.
 func (m *listModel) pageInfo() string {
 	per := m.results.Paginator.PerPage
 	loaded := len(m.results.Items())
@@ -327,11 +324,11 @@ func (m *listModel) pageInfo() string {
 	pages := func(n int) int { return (n + per - 1) / per }
 	switch {
 	case m.total > 0:
-		return fmt.Sprintf("pg %d/%d · %d memories", current, pages(m.total), m.total)
+		return fmt.Sprintf("%d/%d", current, pages(m.total))
 	case m.exhausted:
-		return fmt.Sprintf("pg %d/%d · %d matches", current, pages(loaded), loaded)
+		return fmt.Sprintf("%d/%d", current, pages(loaded))
 	default:
-		return fmt.Sprintf("pg %d/%d+ · %d+ matches", current, pages(loaded), loaded)
+		return fmt.Sprintf("%d/%d+", current, pages(loaded))
 	}
 }
 
@@ -345,7 +342,7 @@ func (m *listModel) view() string {
 	} else {
 		header += "\n"
 	}
-	return header + "\n" + m.results.View()
+	return header + "\n" + m.results.View() + "\n" + m.st.dim.Render(m.pageInfo())
 }
 
 // itemDelegate renders what humans scan by — kind, keywords, date — loud,
