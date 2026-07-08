@@ -63,7 +63,7 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 		where = append(where, "(m.expires_at IS NULL OR m.expires_at > "+arg(nowRFC3339())+")")
 	}
 	for _, kw := range f.Keywords {
-		where = append(where, "m.id IN (SELECT memory_id FROM memory_keywords WHERE keyword = "+arg(kw)+")")
+		where = append(where, "m.pk IN (SELECT memory_pk FROM memory_keywords WHERE keyword = "+arg(kw)+")")
 	}
 	if len(f.KeywordsAny) > 0 {
 		// index probe instead of scanning every row's keywords string: the
@@ -73,8 +73,8 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 		for _, kw := range f.KeywordsAny {
 			placeholders = append(placeholders, arg(kw))
 		}
-		from += " JOIN (SELECT memory_id, COUNT(*) AS matches FROM memory_keywords WHERE keyword IN (" +
-			strings.Join(placeholders, ", ") + ") GROUP BY memory_id) mk ON mk.memory_id = m.id"
+		from += " JOIN (SELECT memory_pk, COUNT(*) AS matches FROM memory_keywords WHERE keyword IN (" +
+			strings.Join(placeholders, ", ") + ") GROUP BY memory_pk) mk ON mk.memory_pk = m.pk"
 		score += fmt.Sprintf(" + mk.matches * %v", weightKeyword)
 	}
 	if f.Kind != "" {
@@ -101,9 +101,9 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 	}
 	query := fmt.Sprintf(`SELECT %s, %s AS snippet, (%s) AS score, %s AS total FROM %s WHERE %s`,
 		searchColumns, snippet, score, total, from, whereSQL)
-	// m.id tiebreak keeps every order total, so OFFSET pages are stable —
+	// m.pk tiebreak keeps every order total, so OFFSET pages are stable —
 	// equal-score rows can never duplicate or vanish across pages
-	query += " ORDER BY " + orderBy(f.Order) + ", m.id LIMIT " + arg(f.Limit)
+	query += " ORDER BY " + orderBy(f.Order) + ", m.pk LIMIT " + arg(f.Limit)
 	if f.Offset > 0 {
 		query += " OFFSET " + arg(f.Offset)
 	}
@@ -183,6 +183,54 @@ func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domai
 		model.AccessCount++
 	}
 	return &model, nil
+}
+
+// GetMany batch-reads full models by id in one query — pack's hydration
+// path. No access bump: pack inclusion is a preview, not a read.
+func (r *MemoryReader) GetMany(ctx context.Context, tx ddd.Transaction, ids []domain.MemoryID) ([]domain.MemoryReadModel, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = string(id)
+	}
+	rows, err := r.db.Resolve(tx).QueryContext(ctx, `
+		SELECT id, content, summary, kind, keywords, source, created_at, expires_at, superseded_by, votes_up, votes_down, access_count
+		FROM memories WHERE id IN (`+strings.Join(placeholders, ", ")+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("reading memories: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // read-only cursor
+
+	models := make([]domain.MemoryReadModel, 0, len(ids))
+	for rows.Next() {
+		var (
+			model                   domain.MemoryReadModel
+			keywords, createdAt     string
+			expiresAt, supersededBy sql.NullString
+		)
+		if err := rows.Scan(&model.ID, &model.Content, &model.Summary, &model.Kind, &keywords, &model.Source,
+			&createdAt, &expiresAt, &supersededBy, &model.VotesUp, &model.VotesDown, &model.AccessCount); err != nil {
+			return nil, fmt.Errorf("scanning memory: %w", err)
+		}
+		model.Keywords = unpackKeywords(keywords)
+		model.SupersededBy = supersededBy.String
+		if model.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {
+			return nil, fmt.Errorf("parsing created_at: %w", err)
+		}
+		if expiresAt.Valid {
+			t, err := time.Parse(time.RFC3339Nano, expiresAt.String)
+			if err != nil {
+				return nil, fmt.Errorf("parsing expires_at: %w", err)
+			}
+			model.ExpiresAt = &t
+		}
+		models = append(models, model)
+	}
+	return models, rows.Err()
 }
 
 // orderBy maps a validated ports.Order* value to its SQL clause; empty is

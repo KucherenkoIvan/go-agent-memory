@@ -51,6 +51,17 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 
+	// read-path tuning on top of the kernel defaults; the client pools a
+	// single connection, so per-connection pragmas hold for the process.
+	// temp_store keeps sort/group spills in RAM; the cache ceiling (64MB)
+	// matters for big stores and costs nothing for small ones.
+	for _, pragma := range []string{"PRAGMA temp_store = MEMORY", "PRAGMA cache_size = -65536"} {
+		if _, err := db.DB().ExecContext(ctx, pragma); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("storage: %s: %w", pragma, err)
+		}
+	}
+
 	migrations, err := fs.Sub(migrationsFS, "migrations")
 	if err != nil {
 		_ = db.Close()

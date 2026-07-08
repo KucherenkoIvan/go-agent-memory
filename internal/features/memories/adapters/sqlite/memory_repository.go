@@ -54,17 +54,23 @@ func (r *MemoryRepository) Save(ctx context.Context, tx ddd.Transaction, memory 
 		return fmt.Errorf("saving memory: %w", err)
 	}
 
-	// mirror keywords into the index table. OR IGNORE keeps re-saves (rate,
-	// supersede) idempotent — keywords are immutable on the aggregate
+	// mirror keywords into the index table, keyed by the integer pk.
+	// OR IGNORE keeps re-saves (rate, supersede) idempotent — keywords are
+	// immutable on the aggregate
 	if len(snap.Keywords) > 0 {
+		var pk int64
+		if err := r.db.Resolve(tx).QueryRowContext(ctx,
+			`SELECT pk FROM memories WHERE id = $1`, string(snap.ID)).Scan(&pk); err != nil {
+			return fmt.Errorf("resolving memory pk: %w", err)
+		}
 		values := make([]string, len(snap.Keywords))
 		args := make([]any, 0, len(snap.Keywords)*2)
 		for i, kw := range snap.Keywords {
 			values[i] = fmt.Sprintf("($%d, $%d)", 2*i+1, 2*i+2)
-			args = append(args, kw, string(snap.ID))
+			args = append(args, kw, pk)
 		}
 		_, err = r.db.Resolve(tx).ExecContext(ctx,
-			"INSERT OR IGNORE INTO memory_keywords (keyword, memory_id) VALUES "+strings.Join(values, ", "),
+			"INSERT OR IGNORE INTO memory_keywords (keyword, memory_pk) VALUES "+strings.Join(values, ", "),
 			args...)
 		if err != nil {
 			return fmt.Errorf("saving memory keywords: %w", err)
@@ -107,7 +113,8 @@ func (r *MemoryRepository) GetByID(ctx context.Context, tx ddd.Transaction, id d
 func (r *MemoryRepository) Delete(ctx context.Context, tx ddd.Transaction, id domain.MemoryID) error {
 	// the memories_fts_delete trigger removes the FTS row; the keyword
 	// mirror is repository-maintained, so it is cleaned here
-	if _, err := r.db.Resolve(tx).ExecContext(ctx, `DELETE FROM memory_keywords WHERE memory_id = $1`, string(id)); err != nil {
+	if _, err := r.db.Resolve(tx).ExecContext(ctx,
+		`DELETE FROM memory_keywords WHERE memory_pk = (SELECT pk FROM memories WHERE id = $1)`, string(id)); err != nil {
 		return fmt.Errorf("deleting memory keywords: %w", err)
 	}
 	if _, err := r.db.Resolve(tx).ExecContext(ctx, `DELETE FROM memories WHERE id = $1`, string(id)); err != nil {

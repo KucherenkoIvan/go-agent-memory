@@ -88,17 +88,28 @@ func (q *RecallQuery) Execute(ctx context.Context, keywords []string, text strin
 	if err != nil {
 		return "", err
 	}
-	results := page.Results
+	// one batch read for the whole candidate page; no access bumps — pack
+	// previews ranked results, it does not read them (only explicit gets
+	// feed the implicit-usefulness signal)
+	ids := make([]domain.MemoryID, len(page.Results))
+	for i, result := range page.Results {
+		ids[i] = domain.MemoryID(result.ID)
+	}
+	models, err := q.reader.GetMany(ctx, ddd.NoTransaction, ids)
+	if err != nil {
+		return "", err
+	}
+	byID := make(map[string]*domain.MemoryReadModel, len(models))
+	for i := range models {
+		byID[models[i].ID] = &models[i]
+	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Recalled memories (%s)\n\n", strings.Join(keywords, ", "))
 	included := 0
 
-	for _, result := range results {
-		full, err := q.reader.GetFull(ctx, ddd.NoTransaction, domain.MemoryID(result.ID), true)
-		if err != nil {
-			return "", err
-		}
+	for _, result := range page.Results {
+		full := byID[result.ID]
 		if full == nil {
 			continue
 		}

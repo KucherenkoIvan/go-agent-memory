@@ -306,7 +306,7 @@ func TestDelete_RemovesForGood(t *testing.T) {
 		t.Fatalf("keyword search hits deleted memory: %+v", results)
 	}
 	var linkRows int
-	if err := store.DB.DB().QueryRowContext(ctx, `SELECT count(*) FROM memory_keywords WHERE memory_id = $1`, string(id)).Scan(&linkRows); err != nil {
+	if err := store.DB.DB().QueryRowContext(ctx, `SELECT count(*) FROM memory_keywords`).Scan(&linkRows); err != nil {
 		t.Fatal(err)
 	}
 	if linkRows != 0 {
@@ -334,7 +334,9 @@ func TestKeywordMirror_IdempotentAcrossResaves(t *testing.T) {
 	})
 
 	var linkRows int
-	if err := store.DB.DB().QueryRowContext(ctx, `SELECT count(*) FROM memory_keywords WHERE memory_id = $1`, string(id)).Scan(&linkRows); err != nil {
+	if err := store.DB.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM memory_keywords WHERE memory_pk = (SELECT pk FROM memories WHERE id = $1)`,
+		string(id)).Scan(&linkRows); err != nil {
 		t.Fatal(err)
 	}
 	if linkRows != 2 {
@@ -352,7 +354,7 @@ func TestKeywordMirror_IdempotentAcrossResaves(t *testing.T) {
 }
 
 func TestRecall_AssemblesWithinBudget(t *testing.T) {
-	svc, _ := setup(t)
+	svc, store := setup(t)
 	ctx := context.Background()
 
 	for i, name := range []string{"alpha", "beta", "gamma"} {
@@ -371,6 +373,16 @@ func TestRecall_AssemblesWithinBudget(t *testing.T) {
 	}
 	if !strings.Contains(pack, "alpha notes") {
 		t.Fatalf("top memory missing:\n%s", pack)
+	}
+
+	// pack is a preview, not a read: it must not feed the access signal
+	var bumped int
+	if err := store.DB.DB().QueryRowContext(ctx,
+		`SELECT count(*) FROM memories WHERE access_count > 0`).Scan(&bumped); err != nil {
+		t.Fatal(err)
+	}
+	if bumped != 0 {
+		t.Fatalf("pack must not bump access counts, %d rows bumped", bumped)
 	}
 	if len(pack) > 700 { // budget respected (small tolerance for the header)
 		t.Fatalf("budget exceeded: %d chars", len(pack))

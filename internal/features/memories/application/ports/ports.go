@@ -70,6 +70,10 @@ type MemoryReader interface {
 	// records the read as an implicit usefulness signal (fire-and-forget,
 	// no transaction on the read path).
 	GetFull(ctx context.Context, tx ddd.Transaction, id domain.MemoryID, bumpAccess bool) (*domain.MemoryReadModel, error)
+	// GetMany batch-reads full models (order unspecified, missing ids
+	// skipped) WITHOUT bumping access — pack previews results, it does not
+	// read them; only explicit gets feed the access signal.
+	GetMany(ctx context.Context, tx ddd.Transaction, ids []domain.MemoryID) ([]domain.MemoryReadModel, error)
 }
 
 // MemoryEventProducer publishes domain events (shape matches
