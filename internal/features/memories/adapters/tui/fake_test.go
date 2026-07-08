@@ -39,12 +39,12 @@ func (f *fakeService) Store(_ context.Context, in managememories.StoreInput) (do
 	return "new-id", nil
 }
 
-// Search honors Order, Offset, and Limit like the real reader — the TUI's
-// pagination and sorting lean on those contract semantics.
-func (f *fakeService) Search(_ context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
+// Search honors Order, Offset, Limit, and Total like the real reader — the
+// TUI's pagination and sorting lean on those contract semantics.
+func (f *fakeService) Search(_ context.Context, filters ports.SearchFilters) (domain.SearchPage, error) {
 	f.searches = append(f.searches, filters)
 	if f.searchErr != nil {
-		return nil, f.searchErr
+		return domain.SearchPage{}, f.searchErr
 	}
 	results := slices.Clone(f.results)
 	rating := func(r domain.SearchResult) int { return r.VotesUp - r.VotesDown }
@@ -62,16 +62,17 @@ func (f *fakeService) Search(_ context.Context, filters ports.SearchFilters) ([]
 	case ports.OrderReadsDesc:
 		slices.SortStableFunc(results, func(a, b domain.SearchResult) int { return b.AccessCount - a.AccessCount })
 	}
+	total := len(results)
 	if filters.Offset > 0 {
 		if filters.Offset >= len(results) {
-			return nil, nil
+			return domain.SearchPage{Total: total}, nil
 		}
 		results = results[filters.Offset:]
 	}
 	if filters.Limit > 0 && len(results) > filters.Limit {
 		results = results[:filters.Limit]
 	}
-	return results, nil
+	return domain.SearchPage{Results: results, Total: total}, nil
 }
 
 func (f *fakeService) Get(_ context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error) {

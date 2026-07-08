@@ -63,7 +63,7 @@ func TestFuzzyRank_CatchesTypos(t *testing.T) {
 func TestRunSearch_EmptyTermsIsTimeline(t *testing.T) {
 	fake := &fakeService{results: []domain.SearchResult{result("x", nil, "recent")}}
 
-	results, err := runSearch(context.Background(), fake, searchSpec{kind: "fact"})
+	results, _, err := runSearch(context.Background(), fake, searchSpec{kind: "fact"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestRunSearch_EmptyTermsIsTimeline(t *testing.T) {
 func TestRunSearch_LayersCarryScreenState(t *testing.T) {
 	fake := &fakeService{}
 
-	if _, err := runSearch(context.Background(), fake,
+	if _, _, err := runSearch(context.Background(), fake,
 		searchSpec{terms: []string{"go", "lint"}, kind: "research", includeDead: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestSearchLayers_RelevanceBeatsSortMode(t *testing.T) {
 	// default sort is created↑ — without relevance priority, "weak" (older)
 	// would jump above "strong"
 	fake := &fakeService{results: []domain.SearchResult{strong, weak, tiedA, tiedB}}
-	results, err := runSearch(context.Background(), fake,
+	results, _, err := runSearch(context.Background(), fake,
 		searchSpec{terms: []string{"jwt"}, sort: sortCreatedAsc})
 	if err != nil {
 		t.Fatal(err)

@@ -100,7 +100,7 @@ func TestRemoteRoundtrip_SourceIsKeyName(t *testing.T) {
 	}
 
 	// search with FTS + keyword filter through the wire
-	results, err := client.Search(ctx, ports.SearchFilters{Query: "remote", Keywords: []string{"e2e"}})
+	results, err := searchResults(client, ctx, ports.SearchFilters{Query: "remote", Keywords: []string{"e2e"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestRemoteAuth_BadKeyIsFriendly(t *testing.T) {
 	_, dial := setup(t)
 
 	client := dial("rcl_" + strings.Repeat("0", 64))
-	_, err := client.Search(context.Background(), ports.SearchFilters{})
+	_, err := searchResults(client, context.Background(), ports.SearchFilters{})
 	if err == nil || !strings.Contains(err.Error(), "recall remote status") {
 		t.Fatalf("bad key error must point at remote status: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestSpaceIsolation_AtTheHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := clientB.Search(ctx, ports.SearchFilters{Keywords: []string{"shared-keyword"}})
+	results, err := searchResults(clientB, ctx, ports.SearchFilters{Keywords: []string{"shared-keyword"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,4 +192,10 @@ func TestSpaceIsolation_AtTheHandler(t *testing.T) {
 	if _, err := clientA.Get(ctx, id); err != nil {
 		t.Fatalf("a's memory must survive b's attempts: %v", err)
 	}
+}
+
+// searchResults unwraps the page — most assertions only care about rows.
+func searchResults(svc memories.Service, ctx context.Context, f ports.SearchFilters) ([]domain.SearchResult, error) {
+	page, err := svc.Search(ctx, f)
+	return page.Results, err
 }

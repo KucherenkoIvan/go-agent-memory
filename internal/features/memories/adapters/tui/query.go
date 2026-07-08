@@ -53,8 +53,10 @@ func (s searchSpec) base() ports.SearchFilters {
 // present; a single timeline fetch otherwise. The spec's sort mode orders
 // the timeline server-side (stable, so offset pagination works); under
 // search it only sorts *within* each layer — relevance (keywords > text >
-// fuzzy) stays the primary order.
-func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]domain.SearchResult, error) {
+// fuzzy) stays the primary order. total is the store's exact match count
+// for the timeline; 0 for layered searches (three overlapping fetches have
+// no single total).
+func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) (results []domain.SearchResult, total int, err error) {
 	layerLimit := layerFetchLimit
 	if spec.limit > 0 {
 		layerLimit = spec.limit
@@ -68,31 +70,38 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]do
 		if spec.review {
 			timeline.Limit = widePoolLimit
 		}
-		return svc.Search(ctx, timeline)
+		page, err := svc.Search(ctx, timeline)
+		if err != nil {
+			return nil, 0, err
+		}
+		return page.Results, page.Total, nil
 	}
 
 	byKeyword := spec.base()
 	byKeyword.KeywordsAny = spec.terms
 	byKeyword.Limit = layerLimit
-	keywordHits, err := svc.Search(ctx, byKeyword)
+	keywordPage, err := svc.Search(ctx, byKeyword)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	keywordHits := keywordPage.Results
 
 	byText := spec.base()
 	byText.Query = strings.Join(spec.terms, " ")
 	byText.Limit = layerLimit
-	textHits, err := svc.Search(ctx, byText)
+	textPage, err := svc.Search(ctx, byText)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	textHits := textPage.Results
 
 	widePool := spec.base()
 	widePool.Limit = widePoolLimit
-	pool, err := svc.Search(ctx, widePool)
+	poolPage, err := svc.Search(ctx, widePool)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	pool := poolPage.Results
 
 	// relevance first inside every layer — the reader's score for keyword
 	// and text hits, the fuzzy match score for the pool — with the sort
@@ -100,7 +109,7 @@ func runSearch(ctx context.Context, svc memories.Service, spec searchSpec) ([]do
 	byScore := func(r domain.SearchResult) float64 { return r.Score }
 	sortLayer(keywordHits, byScore, spec.sort)
 	sortLayer(textHits, byScore, spec.sort)
-	return mergeLayers(keywordHits, textHits, fuzzyRank(pool, spec.terms, spec.sort)), nil
+	return mergeLayers(keywordHits, textHits, fuzzyRank(pool, spec.terms, spec.sort)), 0, nil
 }
 
 // mergeLayers concatenates the layers dropping duplicates — earlier layers

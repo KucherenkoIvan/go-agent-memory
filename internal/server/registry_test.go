@@ -7,8 +7,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/ports"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/application/usecases/managememories"
+	"github.com/KucherenkoIvan/go-agent-memory/internal/features/memories/domain"
 	"github.com/KucherenkoIvan/go-agent-memory/internal/server"
 )
 
@@ -39,7 +41,7 @@ func TestSpaceRegistry_IsolatesSpacesOnDisk(t *testing.T) {
 			t.Fatalf("space file %s: %v", name, err)
 		}
 	}
-	results, err := svcB.Search(ctx, ports.SearchFilters{})
+	results, err := searchResults(svcB, ctx, ports.SearchFilters{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,4 +88,10 @@ func TestSpaceRegistry_RejectsUnsafeNames(t *testing.T) {
 			t.Errorf("space %q must be rejected", space)
 		}
 	}
+}
+
+// searchResults unwraps the page — most assertions only care about rows.
+func searchResults(svc memories.Service, ctx context.Context, f ports.SearchFilters) ([]domain.SearchResult, error) {
+	page, err := svc.Search(ctx, f)
+	return page.Results, err
 }

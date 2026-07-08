@@ -267,6 +267,11 @@ func TestTimeline_PaginatesToTheEnd(t *testing.T) {
 		t.Fatal("a full first page must not be exhausted")
 	}
 
+	if app.list.total != 70 || !strings.Contains(app.list.pageInfo(), "70 memories") {
+		t.Fatalf("numeric pagination must show the exact total: total=%d info=%q",
+			app.list.total, app.list.pageInfo())
+	}
+
 	press(t, app, "G") // jump to end → triggers load-more
 	if n := len(app.list.results.Items()); n != 70 {
 		t.Fatalf("end of page must append the rest: %d rows", n)

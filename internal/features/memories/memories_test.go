@@ -61,7 +61,7 @@ func TestStoreSearchGet_EndToEnd(t *testing.T) {
 	})
 
 	// FTS query finds the right one, with snippet and keywords intact
-	results, err := svc.Search(ctx, ports.SearchFilters{Query: "golangci config"})
+	results, err := searchResults(svc, ctx, ports.SearchFilters{Query: "golangci config"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,13 +73,13 @@ func TestStoreSearchGet_EndToEnd(t *testing.T) {
 	}
 
 	// keyword filter composes (normalized)
-	results, _ = svc.Search(ctx, ports.SearchFilters{Keywords: []string{"GO", "project:kernel"}})
+	results, _ = searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"GO", "project:kernel"}})
 	if len(results) != 1 || results[0].ID != string(id) {
 		t.Fatalf("keyword results: %+v", results)
 	}
 
 	// kind filter
-	results, _ = svc.Search(ctx, ports.SearchFilters{Kind: "preference"})
+	results, _ = searchResults(svc, ctx, ports.SearchFilters{Kind: "preference"})
 	if len(results) != 1 || results[0].Kind != "preference" {
 		t.Fatalf("kind results: %+v", results)
 	}
@@ -116,7 +116,7 @@ func TestSearch_OrderAndOffset_PaginateStably(t *testing.T) {
 	}
 
 	page := func(offset int) []domain.SearchResult {
-		results, err := svc.Search(ctx, ports.SearchFilters{
+		results, err := searchResults(svc, ctx, ports.SearchFilters{
 			Order: ports.OrderCreatedAsc, Limit: 2, Offset: offset,
 		})
 		if err != nil {
@@ -133,12 +133,15 @@ func TestSearch_OrderAndOffset_PaginateStably(t *testing.T) {
 		t.Fatalf("created_asc pages out of order: %v %v", one, two)
 	}
 
-	desc, err := svc.Search(ctx, ports.SearchFilters{Order: ports.OrderCreatedDesc, Limit: 1})
+	descPage, err := svc.Search(ctx, ports.SearchFilters{Order: ports.OrderCreatedDesc, Limit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(desc) != 1 || desc[0].Summary != "third notes" {
-		t.Fatalf("created_desc must lead with the newest: %+v", desc)
+	if len(descPage.Results) != 1 || descPage.Results[0].Summary != "third notes" {
+		t.Fatalf("created_desc must lead with the newest: %+v", descPage.Results)
+	}
+	if descPage.Total != 3 {
+		t.Fatalf("total must count all matches regardless of limit: %d", descPage.Total)
 	}
 
 	if _, err := svc.Search(ctx, ports.SearchFilters{Order: "bogus"}); err == nil {
@@ -168,7 +171,7 @@ func TestRating_DrivesRanking(t *testing.T) {
 	}
 	_ = svc.Rate(ctx, first, false)
 
-	results, err := svc.Search(ctx, ports.SearchFilters{Keywords: []string{"lint"}})
+	results, err := searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"lint"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,12 +196,12 @@ func TestSupersede_LeavesDefaultSearch(t *testing.T) {
 		Kind: "location", Keywords: []string{"db"}, Supersedes: string(old),
 	})
 
-	results, _ := svc.Search(ctx, ports.SearchFilters{Keywords: []string{"db"}})
+	results, _ := searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"db"}})
 	if len(results) != 1 || results[0].ID != string(newer) {
 		t.Fatalf("default search: %+v", results)
 	}
 
-	all, _ := svc.Search(ctx, ports.SearchFilters{Keywords: []string{"db"}, IncludeDead: true})
+	all, _ := searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"db"}, IncludeDead: true})
 	if len(all) != 2 {
 		t.Fatalf("--all search: %+v", all)
 	}
@@ -245,17 +248,17 @@ func TestTTL_ExpiredLeavesDefaultSearch(t *testing.T) {
 	}
 
 	search := managememories.NewSearchQuery(reader)
-	results, err := search.Execute(ctx, ports.SearchFilters{Keywords: []string{"ops"}})
+	page, err := search.Execute(ctx, ports.SearchFilters{Keywords: []string{"ops"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Summary != "keeper" {
-		t.Fatalf("expired must be excluded: %+v", results)
+	if len(page.Results) != 1 || page.Results[0].Summary != "keeper" {
+		t.Fatalf("expired must be excluded: %+v", page.Results)
 	}
 
 	all, _ := search.Execute(ctx, ports.SearchFilters{Keywords: []string{"ops"}, IncludeDead: true})
-	if len(all) != 2 {
-		t.Fatalf("--all must include expired: %+v", all)
+	if len(all.Results) != 2 {
+		t.Fatalf("--all must include expired: %+v", all.Results)
 	}
 }
 
@@ -281,7 +284,7 @@ func TestDelete_RemovesForGood(t *testing.T) {
 	}
 
 	// the FTS trigger must have dropped the index row too
-	results, err := svc.Search(ctx, ports.SearchFilters{Query: "obsolete garbage", IncludeDead: true})
+	results, err := searchResults(svc, ctx, ports.SearchFilters{Query: "obsolete garbage", IncludeDead: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +301,7 @@ func TestDelete_RemovesForGood(t *testing.T) {
 
 	// the repository must have cleaned the keyword mirror in the same tx —
 	// stale links are how a reused id would produce false search hits
-	results, _ = svc.Search(ctx, ports.SearchFilters{KeywordsAny: []string{"prune-me"}, IncludeDead: true})
+	results, _ = searchResults(svc, ctx, ports.SearchFilters{KeywordsAny: []string{"prune-me"}, IncludeDead: true})
 	if len(results) != 0 {
 		t.Fatalf("keyword search hits deleted memory: %+v", results)
 	}
@@ -339,7 +342,7 @@ func TestKeywordMirror_IdempotentAcrossResaves(t *testing.T) {
 	}
 
 	// default search sees only the superseding memory despite live links on both
-	results, err := svc.Search(ctx, ports.SearchFilters{KeywordsAny: []string{"mirror-kw"}})
+	results, err := searchResults(svc, ctx, ports.SearchFilters{KeywordsAny: []string{"mirror-kw"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,11 +417,17 @@ func TestRecall_KeywordsORMatch_MoreMatchesRankHigher(t *testing.T) {
 	}
 
 	// search keeps AND semantics: both keywords → only the double-tagged one
-	results, err := svc.Search(ctx, ports.SearchFilters{Keywords: []string{"go", "project:app"}})
+	results, err := searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"go", "project:app"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(results) != 1 || results[0].Summary != "both notes" {
 		t.Fatalf("search must stay AND: %+v", results)
 	}
+}
+
+// searchResults unwraps the page — most assertions only care about rows.
+func searchResults(svc memories.Service, ctx context.Context, f ports.SearchFilters) ([]domain.SearchResult, error) {
+	page, err := svc.Search(ctx, f)
+	return page.Results, err
 }

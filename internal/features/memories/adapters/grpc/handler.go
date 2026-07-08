@@ -74,7 +74,7 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 	if err != nil {
 		return nil, err
 	}
-	results, err := svc.Search(ctx, ports.SearchFilters{
+	page, err := svc.Search(ctx, ports.SearchFilters{
 		Query:       req.GetQuery(),
 		Keywords:    req.GetKeywords(),
 		KeywordsAny: req.GetKeywordsAny(),
@@ -90,8 +90,8 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 		return nil, err
 	}
 
-	out := make([]*recallv1.SearchResult, 0, len(results))
-	for _, r := range results {
+	out := make([]*recallv1.SearchResult, 0, len(page.Results))
+	for _, r := range page.Results {
 		out = append(out, &recallv1.SearchResult{
 			Id: r.ID, Summary: r.Summary, Kind: r.Kind, Keywords: r.Keywords,
 			Source: r.Source, CreatedAt: timestamppb.New(r.CreatedAt),
@@ -100,7 +100,7 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 			AccessCount: int32(r.AccessCount), //nolint:gosec // access counts
 		})
 	}
-	return &recallv1.SearchResponse{Results: out}, nil
+	return &recallv1.SearchResponse{Results: out, Total: int64(page.Total)}, nil
 }
 
 func (h *Handler) Get(ctx context.Context, req *recallv1.GetRequest) (*recallv1.GetResponse, error) {

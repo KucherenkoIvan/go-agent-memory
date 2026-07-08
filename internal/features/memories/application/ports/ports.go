@@ -62,7 +62,7 @@ func ValidOrder(order string) bool {
 
 // MemoryReader serves the queries: ranked search and full reads.
 type MemoryReader interface {
-	Search(ctx context.Context, tx ddd.Transaction, filters SearchFilters) ([]domain.SearchResult, error)
+	Search(ctx context.Context, tx ddd.Transaction, filters SearchFilters) (domain.SearchPage, error)
 	// GetFull returns (nil, nil) when the memory does not exist. bumpAccess
 	// records the read as an implicit usefulness signal (fire-and-forget,
 	// no transaction on the read path).

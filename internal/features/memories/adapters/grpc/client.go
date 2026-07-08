@@ -42,7 +42,7 @@ func (c *Client) Store(ctx context.Context, in managememories.StoreInput) (domai
 	return domain.MemoryID(resp.GetId()), nil
 }
 
-func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
+func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) (domain.SearchPage, error) {
 	var since, until *timestamppb.Timestamp
 	if !filters.Since.IsZero() {
 		since = timestamppb.New(filters.Since)
@@ -59,7 +59,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) ([]dom
 		IncludeDead: filters.IncludeDead,
 	})
 	if err != nil {
-		return nil, mapRemoteError(err)
+		return domain.SearchPage{}, mapRemoteError(err)
 	}
 
 	results := make([]domain.SearchResult, 0, len(resp.GetResults()))
@@ -73,7 +73,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) ([]dom
 			AccessCount: int(r.GetAccessCount()),
 		})
 	}
-	return results, nil
+	return domain.SearchPage{Results: results, Total: int(resp.GetTotal())}, nil
 }
 
 func (c *Client) Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error) {

@@ -27,14 +27,14 @@ func NewSearchQuery(reader ports.MemoryReader) *SearchQuery {
 	return &SearchQuery{reader: reader}
 }
 
-func (q *SearchQuery) Execute(ctx context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
+func (q *SearchQuery) Execute(ctx context.Context, filters ports.SearchFilters) (domain.SearchPage, error) {
 	if filters.Limit <= 0 {
 		filters.Limit = defaultSearchLimit
 	}
 	filters.Limit = min(filters.Limit, maxSearchLimit)
 	filters.Offset = max(filters.Offset, 0)
 	if !ports.ValidOrder(filters.Order) {
-		return nil, fmt.Errorf("invalid_order: %q — one of created_asc, created_desc, rating_asc, rating_desc, reads_asc, reads_desc, or empty for relevance", filters.Order)
+		return domain.SearchPage{}, fmt.Errorf("invalid_order: %q — one of created_asc, created_desc, rating_asc, rating_desc, reads_asc, reads_desc, or empty for relevance", filters.Order)
 	}
 	filters.Keywords = domain.NormalizeKeywords(filters.Keywords)
 	filters.KeywordsAny = domain.NormalizeKeywords(filters.KeywordsAny)
@@ -79,7 +79,7 @@ func (q *RecallQuery) Execute(ctx context.Context, keywords []string, text strin
 	// OR semantics on purpose: session bootstrap throws candidate keywords
 	// at the store — any match qualifies, more matches rank higher. An
 	// optional full-text query narrows on top.
-	results, err := q.reader.Search(ctx, ddd.NoTransaction, ports.SearchFilters{
+	page, err := q.reader.Search(ctx, ddd.NoTransaction, ports.SearchFilters{
 		Query:       text,
 		KeywordsAny: domain.NormalizeKeywords(keywords),
 		Limit:       recallSearchLimit,
@@ -87,6 +87,7 @@ func (q *RecallQuery) Execute(ctx context.Context, keywords []string, text strin
 	if err != nil {
 		return "", err
 	}
+	results := page.Results
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Recalled memories (%s)\n\n", strings.Join(keywords, ", "))

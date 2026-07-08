@@ -36,7 +36,7 @@ func NewMemoryReader(db *kernelsqlite.Client) *MemoryReader {
 
 const searchColumns = `m.id, m.summary, m.kind, m.keywords, m.source, m.created_at, m.expires_at, m.votes_up, m.votes_down, m.access_count`
 
-func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.SearchFilters) ([]domain.SearchResult, error) {
+func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.SearchFilters) (domain.SearchPage, error) {
 	var (
 		where []string
 		args  []any
@@ -87,10 +87,16 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 		where = append(where, "m.created_at <= "+arg(f.Until.UTC().Format(time.RFC3339Nano)))
 	}
 
-	query := fmt.Sprintf(`SELECT %s, %s AS snippet, (%s) AS score FROM %s`, searchColumns, snippet, score, from)
+	// the exact match count rides along as a scalar subquery over the same
+	// FROM/WHERE — $N params bind by number, so it reuses the outer args.
+	// (COUNT(*) OVER () would be cheaper, but SQLite refuses fts5 aux
+	// functions like bm25/snippet alongside window functions.)
+	whereSQL := "1=1"
 	if len(where) > 0 {
-		query += " WHERE " + strings.Join(where, " AND ")
+		whereSQL = strings.Join(where, " AND ")
 	}
+	query := fmt.Sprintf(`SELECT %s, %s AS snippet, (%s) AS score, (SELECT COUNT(*) FROM %s WHERE %s) AS total FROM %s WHERE %s`,
+		searchColumns, snippet, score, from, whereSQL, from, whereSQL)
 	// m.id tiebreak keeps every order total, so OFFSET pages are stable —
 	// equal-score rows can never duplicate or vanish across pages
 	query += " ORDER BY " + orderBy(f.Order) + ", m.id LIMIT " + arg(f.Limit)
@@ -100,11 +106,11 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 
 	rows, err := r.db.Resolve(tx).QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("searching memories: %w", err)
+		return domain.SearchPage{}, fmt.Errorf("searching memories: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck // read-only cursor
 
-	results := []domain.SearchResult{}
+	page := domain.SearchPage{Results: []domain.SearchResult{}}
 	for rows.Next() {
 		var (
 			res       domain.SearchResult
@@ -114,23 +120,23 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 		)
 		if err := rows.Scan(&res.ID, &res.Summary, &res.Kind, &keywords, &res.Source,
 			&createdAt, &expiresAt, &res.VotesUp, &res.VotesDown, &res.AccessCount,
-			&res.Snippet, &res.Score); err != nil {
-			return nil, fmt.Errorf("scanning search result: %w", err)
+			&res.Snippet, &res.Score, &page.Total); err != nil {
+			return domain.SearchPage{}, fmt.Errorf("scanning search result: %w", err)
 		}
 		res.Keywords = unpackKeywords(keywords)
 		if res.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {
-			return nil, fmt.Errorf("parsing created_at: %w", err)
+			return domain.SearchPage{}, fmt.Errorf("parsing created_at: %w", err)
 		}
 		if expiresAt.Valid {
 			t, err := time.Parse(time.RFC3339Nano, expiresAt.String)
 			if err != nil {
-				return nil, fmt.Errorf("parsing expires_at: %w", err)
+				return domain.SearchPage{}, fmt.Errorf("parsing expires_at: %w", err)
 			}
 			res.ExpiresAt = &t
 		}
-		results = append(results, res)
+		page.Results = append(page.Results, res)
 	}
-	return results, rows.Err()
+	return page, rows.Err()
 }
 
 func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domain.MemoryID, bumpAccess bool) (*domain.MemoryReadModel, error) {

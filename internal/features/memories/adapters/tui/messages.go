@@ -20,6 +20,9 @@ type (
 		fetch fetchMode
 		// expected is the requested row count — fewer back means exhausted.
 		expected int
+		// total is the store's exact match count (timeline only; 0 under
+		// layered search, where no single total exists).
+		total int
 	}
 
 	memoryLoadedMsg struct {

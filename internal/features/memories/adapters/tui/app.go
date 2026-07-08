@@ -177,6 +177,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case fetchAppend:
 			before := len(a.list.results.Items())
 			a.list.appendResults(msg.results)
+			a.list.total = msg.total
 			a.list.exhausted = len(msg.results) < msg.expected ||
 				len(a.list.results.Items()) == before
 		case fetchGrow:
@@ -187,9 +188,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.list.exhausted = len(msg.results) <= before // no progress = done
 		default:
 			a.list.apply(msg.results)
-			// only the timeline can be exhausted on the first page; a
-			// layered search merges up to 3 fetches
-			if len(strings.Fields(a.list.search.Value())) == 0 {
+			a.list.total = msg.total
+			if a.list.review { // curation preset filters client-side
+				a.list.total = 0
+				a.list.exhausted = true
+			} else if len(strings.Fields(a.list.search.Value())) == 0 {
+				// only the timeline can be exhausted on the first page; a
+				// layered search merges up to 3 fetches
 				a.list.exhausted = len(msg.results) < msg.expected
 			}
 		}

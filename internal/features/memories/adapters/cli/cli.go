@@ -168,11 +168,12 @@ reads_desc.`,
 			if filters.Until, err = parseTimeFlag(until); err != nil {
 				return err
 			}
-			results, err := svc.Search(cmd.Context(), filters)
+			page, err := svc.Search(cmd.Context(), filters)
 			if err != nil {
 				return err
 			}
-			return emit(cmd, opts, map[string]any{"results": results}, formatResults(results))
+			return emit(cmd, opts, map[string]any{"results": page.Results, "total": page.Total},
+				formatResults(page.Results)+fmt.Sprintf("\n%d total", page.Total))
 		}),
 	}
 	cmd.Flags().StringVar(&text, "text", "", "full-text query layered on the keyword results")

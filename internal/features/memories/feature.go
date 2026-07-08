@@ -20,7 +20,7 @@ import (
 // Service is the application facade the faces depend on.
 type Service interface {
 	Store(ctx context.Context, in managememories.StoreInput) (domain.MemoryID, error)
-	Search(ctx context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error)
+	Search(ctx context.Context, filters ports.SearchFilters) (domain.SearchPage, error)
 	Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryReadModel, error)
 	Rate(ctx context.Context, id domain.MemoryID, up bool) error
 	// Recall assembles the top-ranked memories for the keywords (any may
@@ -62,7 +62,7 @@ func (s *localService) Store(ctx context.Context, in managememories.StoreInput) 
 	return s.store.Execute(ctx, in)
 }
 
-func (s *localService) Search(ctx context.Context, filters ports.SearchFilters) ([]domain.SearchResult, error) {
+func (s *localService) Search(ctx context.Context, filters ports.SearchFilters) (domain.SearchPage, error) {
 	return s.search.Execute(ctx, filters)
 }
 

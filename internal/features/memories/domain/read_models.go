@@ -19,6 +19,14 @@ type SearchResult struct {
 	AccessCount int        `json:"accessCount"`
 }
 
+// SearchPage is one page of ranked results plus the total match count —
+// Total counts every row the filters match, regardless of limit/offset,
+// so callers can paginate with exact page numbers.
+type SearchPage struct {
+	Results []SearchResult `json:"results"`
+	Total   int            `json:"total"`
+}
+
 // MemoryReadModel is the full view returned by get.
 type MemoryReadModel struct {
 	ID           string     `json:"id"`

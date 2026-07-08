@@ -36,11 +36,11 @@ func searchCmd(ctx context.Context, svc memories.Service, seq int, spec searchSp
 		}
 	}
 	return func() tea.Msg {
-		results, err := runSearch(ctx, svc, spec)
+		results, total, err := runSearch(ctx, svc, spec)
 		if err != nil {
 			return errMsg{op: "search", err: err}
 		}
-		return searchDoneMsg{seq: seq, results: results, fetch: fetch, expected: expected}
+		return searchDoneMsg{seq: seq, results: results, fetch: fetch, expected: expected, total: total}
 	}
 }
 
@@ -102,7 +102,7 @@ func reconnectCmd(ctx context.Context, cleanup func(), connect Connect) tea.Cmd 
 		}
 		probeCtx, cancel := context.WithTimeout(ctx, reconnectProbeTimeout)
 		defer cancel()
-		if _, err := svc.Search(probeCtx, ports.SearchFilters{Limit: 1}); err != nil {
+		if _, err := svc.Search(probeCtx, ports.SearchFilters{Limit: 1}); err != nil { //nolint:staticcheck // probe discards the page
 			if newCleanup != nil {
 				newCleanup()
 			}

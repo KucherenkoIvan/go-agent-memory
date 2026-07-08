@@ -114,6 +114,9 @@ type searchIn struct {
 
 type searchOut struct {
 	Results []domain.SearchResult `json:"results"`
+	// Total counts every match regardless of limit/offset — page with
+	// offset when it exceeds len(results).
+	Total int `json:"total"`
 }
 
 func searchHandler(svc memories.Service) sdk.ToolHandlerFor[searchIn, searchOut] {
@@ -136,11 +139,11 @@ func searchHandler(svc memories.Service) sdk.ToolHandlerFor[searchIn, searchOut]
 		} else {
 			filters.KeywordsAny = in.Keywords
 		}
-		results, err := svc.Search(ctx, filters)
+		page, err := svc.Search(ctx, filters)
 		if err != nil {
 			return nil, searchOut{}, err
 		}
-		return nil, searchOut{Results: results}, nil
+		return nil, searchOut{Results: page.Results, Total: page.Total}, nil
 	}
 }
 

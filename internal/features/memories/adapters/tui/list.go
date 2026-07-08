@@ -41,6 +41,9 @@ type listModel struct {
 	exhausted   bool
 	pendingMore bool
 	growLimit   int
+	// total is the store's exact match count for the current query
+	// (timeline); 0 = unknown (layered search until exhausted)
+	total int
 	// remoteAddr, when set, badges the session as connected to a server
 	remoteAddr string
 	// terms is shared with the row delegate: the current search terms drive
@@ -151,6 +154,9 @@ func newListModel(st *styles) listModel {
 	// default keymap binds esc to Quit, which must not close the TUI
 	l.KeyMap.Quit.SetEnabled(false)
 	l.KeyMap.ForceQuit.SetEnabled(false)
+	// the dot paginator scales terribly (100k rows = thousands of dots);
+	// the badges line shows numeric pages instead
+	l.SetShowPagination(false)
 
 	return listModel{st: st, search: search, results: l, terms: terms}
 }
@@ -302,7 +308,31 @@ func (m *listModel) badges() string {
 	if m.review {
 		parts = append(parts, m.st.errText.Render("[review candidates]"))
 	}
+	if pg := m.pageInfo(); pg != "" {
+		parts = append(parts, m.st.dim.Render(pg))
+	}
 	return strings.Join(parts, " ")
+}
+
+// pageInfo renders numeric pagination: exact page count when the store
+// reported a total, loaded count (with a trailing + while more may exist)
+// otherwise.
+func (m *listModel) pageInfo() string {
+	per := m.results.Paginator.PerPage
+	loaded := len(m.results.Items())
+	if per <= 0 || loaded == 0 {
+		return ""
+	}
+	current := m.results.Paginator.Page + 1
+	pages := func(n int) int { return (n + per - 1) / per }
+	switch {
+	case m.total > 0:
+		return fmt.Sprintf("pg %d/%d · %d memories", current, pages(m.total), m.total)
+	case m.exhausted:
+		return fmt.Sprintf("pg %d/%d · %d matches", current, pages(loaded), loaded)
+	default:
+		return fmt.Sprintf("pg %d/%d+ · %d+ matches", current, pages(loaded), loaded)
+	}
 }
 
 func (m *listModel) view() string {
