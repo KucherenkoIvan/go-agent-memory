@@ -37,8 +37,8 @@ func TestMultiProcessModel_ConcurrentStores(t *testing.T) {
 			defer wg.Done()
 			for j := range 10 {
 				_, err := store.DB.DB().ExecContext(ctx, `
-					INSERT INTO memories (id, content, summary, kind, keywords, source, created_at)
-					VALUES ($1, 'c', 's', 'fact', ' k ', 'test', '2026-01-01T00:00:00Z')`,
+					INSERT INTO memories (id, content, summary, kind, keywords, source, ttl_hours, expires_at, created_at)
+					VALUES ($1, 'c', 's', 'fact', ' k ', 'test', 24, '2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z')`,
 					// unique ids across both writers
 					filepath.Join("id", string(rune('a'+i)), string(rune('0'+j))))
 				if err != nil {

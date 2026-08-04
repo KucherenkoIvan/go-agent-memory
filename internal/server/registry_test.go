@@ -30,7 +30,7 @@ func TestSpaceRegistry_IsolatesSpacesOnDisk(t *testing.T) {
 	}
 
 	if _, err := svcA.Store(ctx, managememories.StoreInput{
-		Content: "a only", Summary: "s", Kind: "fact", Keywords: []string{"k"}, Source: "t",
+		Content: "a only", Summary: "s", Kind: "fact", Keywords: []string{"k"}, Source: "t", TTLHours: 30 * 24,
 	}); err != nil {
 		t.Fatal(err)
 	}

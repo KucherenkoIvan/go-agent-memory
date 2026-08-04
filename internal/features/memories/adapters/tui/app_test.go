@@ -485,6 +485,32 @@ func TestSupersedeForm_SubmitsCorrection(t *testing.T) {
 	}
 }
 
+// ttl is required now, so the correction inherits the original's lifetime
+// instead of opening on an empty field the human has to fill every time.
+func TestSupersedeForm_InheritsLifetime(t *testing.T) {
+	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	fake := &fakeService{
+		results: []domain.SearchResult{someResult("m1", "old summary")},
+		memory: &domain.MemoryReadModel{
+			ID: "m1", Content: "old content", Summary: "old summary",
+			Kind: "fact", Keywords: []string{"topic"},
+			CreatedAt: created, ExpiresAt: created.Add(72 * time.Hour),
+		},
+		storeID: "m2",
+	}
+	app := newTestApp(fake)
+	seed(app, t, fake)
+
+	press(t, app, "e")
+	if got := app.form.ttl.Value(); got != "72" {
+		t.Fatalf("ttl must be pre-filled from the original lifetime: %q", got)
+	}
+	press(t, app, "ctrl+s", "y")
+	if len(fake.stores) != 1 || fake.stores[0].TTLHours != 72 {
+		t.Fatalf("store input: %+v", fake.stores)
+	}
+}
+
 func TestSupersedeForm_DomainErrorLandsOnField(t *testing.T) {
 	fake := &fakeService{
 		results:  []domain.SearchResult{someResult("m1", "s")},

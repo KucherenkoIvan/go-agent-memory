@@ -74,9 +74,12 @@ func newFormModel(st *styles, from *domain.MemoryReadModel, returnTo mode, width
 	keywords.SetValue(strings.Join(from.Keywords, ", "))
 	keywords.Prompt = ""
 
+	// ttl is required, so the correction inherits the original's lifetime —
+	// the editor is for changing what the memory says, not its shelf life
 	ttl := textinput.New()
 	ttl.Prompt = ""
-	ttl.Placeholder = "hours, empty = never"
+	ttl.Placeholder = "hours (required) — 720 = 30 days, 8760 = a year"
+	ttl.SetValue(strconv.Itoa(max(1, int(from.ExpiresAt.Sub(from.CreatedAt).Hours()))))
 
 	find := textinput.New()
 	find.Prompt = "/ "
@@ -202,13 +205,9 @@ func (f *formModel) update(msg tea.Msg) tea.Cmd {
 // input assembles the StoreInput; only TTL needs pre-parsing — everything
 // else is the domain's job to validate.
 func (f *formModel) input() (managememories.StoreInput, error) {
-	ttlHours := 0
-	if raw := strings.TrimSpace(f.ttl.Value()); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil {
-			return managememories.StoreInput{}, errors.New("ttl must be a number of hours")
-		}
-		ttlHours = parsed
+	ttlHours, err := strconv.Atoi(strings.TrimSpace(f.ttl.Value()))
+	if err != nil {
+		return managememories.StoreInput{}, errors.New("ttl must be a number of hours")
 	}
 
 	var keywords []string
@@ -250,7 +249,7 @@ func (f *formModel) applyError(err error) {
 	case errors.As(err, &kindErr):
 		f.fieldErr, f.errField = "kind: pick one of the listed kinds", fieldKind
 	case errors.As(err, &ttlErr):
-		f.fieldErr, f.errField = "ttl: must be ≥ 0 hours", fieldTTL
+		f.fieldErr, f.errField = "ttl: 1 hour to 10 years — every memory expires", fieldTTL
 	case errors.As(err, &superErr):
 		f.fieldErr, f.errField = "already superseded elsewhere — refresh the list", -1
 	default:

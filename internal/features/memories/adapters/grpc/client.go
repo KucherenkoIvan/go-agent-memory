@@ -2,7 +2,6 @@ package grpcadapter
 
 import (
 	"context"
-	"time"
 
 	recallv1 "github.com/KucherenkoIvan/go-kernel/contracts/gen/grpc/recall/v1"
 	"google.golang.org/grpc"
@@ -68,7 +67,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) (domai
 		results = append(results, domain.SearchResult{
 			ID: r.GetId(), Summary: r.GetSummary(), Kind: r.GetKind(),
 			Keywords: r.GetKeywords(), Source: r.GetSource(),
-			CreatedAt: r.GetCreatedAt().AsTime(), ExpiresAt: optionalTime(r.GetExpiresAt()),
+			CreatedAt: r.GetCreatedAt().AsTime(), ExpiresAt: r.GetExpiresAt().AsTime(),
 			Snippet: r.GetSnippet(), Score: r.GetScore(),
 			VotesUp: int(r.GetVotesUp()), VotesDown: int(r.GetVotesDown()),
 			AccessCount: int(r.GetAccessCount()),
@@ -86,7 +85,7 @@ func (c *Client) Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryRea
 	return &domain.MemoryReadModel{
 		ID: m.GetId(), Content: m.GetContent(), Summary: m.GetSummary(),
 		Kind: m.GetKind(), Keywords: m.GetKeywords(), Source: m.GetSource(),
-		CreatedAt: m.GetCreatedAt().AsTime(), ExpiresAt: optionalTime(m.GetExpiresAt()),
+		CreatedAt: m.GetCreatedAt().AsTime(), ExpiresAt: m.GetExpiresAt().AsTime(),
 		SupersededBy: m.GetSupersededBy(),
 		VotesUp:      int(m.GetVotesUp()), VotesDown: int(m.GetVotesDown()),
 		AccessCount: int(m.GetAccessCount()),
@@ -113,12 +112,4 @@ func (c *Client) Recall(ctx context.Context, keywords []string, text string, bud
 func (c *Client) Delete(ctx context.Context, id domain.MemoryID) error {
 	_, err := c.rpc.Delete(c.auth(ctx), &recallv1.DeleteRequest{Id: string(id)})
 	return mapRemoteError(err)
-}
-
-func optionalTime(ts *timestamppb.Timestamp) *time.Time {
-	if ts == nil {
-		return nil
-	}
-	t := ts.AsTime()
-	return &t
 }

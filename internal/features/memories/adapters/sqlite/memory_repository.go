@@ -31,10 +31,7 @@ func NewMemoryRepository(db *kernelsqlite.Client) *MemoryRepository {
 func (r *MemoryRepository) Save(ctx context.Context, tx ddd.Transaction, memory *domain.Memory) error {
 	snap := memory.Snapshot()
 
-	var expiresAt any
-	if exp := memory.ExpiresAt(); !exp.IsZero() {
-		expiresAt = exp.UTC().Format(time.RFC3339Nano)
-	}
+	expiresAt := memory.ExpiresAt().UTC().Format(time.RFC3339Nano)
 	var supersededBy any
 	if snap.SupersededBy != "" {
 		supersededBy = string(snap.SupersededBy)

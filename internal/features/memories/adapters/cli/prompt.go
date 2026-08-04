@@ -25,7 +25,13 @@ If recall returns nothing relevant, fall back to your harness's builtin memory f
 **When you learn something durable** — a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location of something — store it at that moment, not at end-of-session (wrap-up and context compaction both lose findings). Search first to avoid duplicates:
 
     recall memory store --summary "<one line>" --kind <fact|preference|research|decision|location|reference> \
-      -k <topic> -k <topic> [--ttl <hours>] [--supersedes <id>] "<content>"
+      -k <topic> -k <topic> --ttl <hours> [--supersedes <id>] "<content>"
+
+**When a memory turns out to be obsolete** — the code, tool, or process it describes is gone, the decision was reverted, the fact was never true — delete it. Nothing is gained by leaving it to rank and mislead:
+
+    recall memory delete <id>
+
+Deletion is permanent and unconfirmed. Reach for --supersedes instead whenever the topic still exists and only what you know about it changed.
 
 Rules:
 - if your harness has builtin memory, recall is the primary store: durable findings go here even when they would also fit the builtin one — recall is shared, the builtin is not. Reserve builtin memory for harness-specific operating notes.
@@ -34,6 +40,6 @@ Rules:
 - keywords: lowercase topics; use prefixes for scoping, e.g. project:myapp, task:lint.
 - never store secrets or credentials.
 - to correct an existing memory, store the correction with --supersedes <old-id> — do not duplicate.
-- use --ttl for time-boxed facts ("freeze until Friday").
+- --ttl is required: how long the fact stays useful, in hours (720 = 30 days, 2160 = a quarter, 8760 = a year, max 10 years). Judge it from the fact itself — a sprint detail dies with the sprint, a root cause outlives it, an architectural decision lasts years. Expired memories leave default search; --all brings them back.
 - output is JSON when piped; exit code 0 = success, 1 = error (JSON on stderr).
 - fetch full content with: recall memory get <id>`

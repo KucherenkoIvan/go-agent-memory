@@ -28,14 +28,15 @@ func NewServer(svc memories.Service, version string) *sdk.Server {
 - call pack with topic keywords when there is reason to believe past work touched this or a related problem (the project is familiar, recent changes led to the current task, the issue sounds recurrent) — not reflexively on every task, that would pull irrelevant context in;
 - search again mid-session when the work shifts to a new problem — the opening pack does not cover topics that emerged later;
 - when you rely on a memory, rate it afterwards — ratings drive ranking for everyone;
-- store at the moment of a finding — a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Do not batch stores to end-of-session: wrap-up and context compaction both lose findings.
+- store at the moment of a finding — a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Do not batch stores to end-of-session: wrap-up and context compaction both lose findings. Every memory carries a ttlHours: judge how long the fact will stay true and give it that lifetime — nothing is stored forever;
+- delete a memory when you find it describes something that no longer exists at all; supersede it when the topic still exists but what you know changed.
 If your harness has builtin memory, recall is the primary store: durable findings go here even when they would also fit the builtin one — recall is shared, the builtin is not. Reserve builtin memory for harness-specific operating notes.
 Prefer small, focused memories: each should cover one self-contained finding or topic, with sharp keywords. Search and ranking are good — several focused notes beat one sprawling document. Search before storing to avoid duplicates; correct with supersedes, never re-store.`,
 	})
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "store_memory",
-		Description: "Store a memory for future agents — do this unprompted, at the moment of the finding: a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Don't batch to end-of-session. If your harness has builtin memory, durable findings go here instead — recall is shared across sessions and harnesses, the builtin is not. Prefer small, focused memories: each covering one self-contained finding or topic, with sharp keywords; split sprawling write-ups into several notes (search and ranking do the assembling). Search first to avoid duplicates; pass supersedes to correct an existing memory.",
+		Description: "Store a memory for future agents — do this unprompted, at the moment of the finding: a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Don't batch to end-of-session. If your harness has builtin memory, durable findings go here instead — recall is shared across sessions and harnesses, the builtin is not. Prefer small, focused memories: each covering one self-contained finding or topic, with sharp keywords; split sprawling write-ups into several notes (search and ranking do the assembling). Every memory needs a ttlHours — how long the fact stays useful; nothing is stored forever. Search first to avoid duplicates; pass supersedes to correct an existing memory.",
 	}, storeHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -52,6 +53,11 @@ Prefer small, focused memories: each should cover one self-contained finding or 
 		Name:        "rate_memory",
 		Description: "Rate a memory after using it: up if it was correct and helpful, down if wrong or misleading. Ratings drive search ranking.",
 	}, rateHandler(svc))
+
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "delete_memory",
+		Description: "Delete a memory permanently — no undo. Use it when a memory should not exist anymore: it describes code, tooling, or a process that is gone, a decision that was reverted, or something that was never true. When the topic still exists but the knowledge changed, store the new version with supersedes instead — that keeps the history and drops the old one out of default search on its own.",
+	}, deleteHandler(svc))
 
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "pack",
@@ -71,7 +77,7 @@ type storeIn struct {
 	Summary  string   `json:"summary" jsonschema:"required one-line summary shown in search results"`
 	Kind     string   `json:"kind" jsonschema:"one of: fact, preference, research, decision, location, reference"`
 	Keywords []string `json:"keywords" jsonschema:"at least one; lowercase topic tags, conventions like project:name welcome"`
-	TTLHours int      `json:"ttlHours,omitempty" jsonschema:"optional expiry in hours for time-boxed facts"`
+	TTLHours int      `json:"ttlHours" jsonschema:"how long this stays useful, in hours — required, every memory expires. 720 = 30 days, 2160 = a quarter, 8760 = a year. Judge it from the fact itself: a sprint detail dies with the sprint, a root cause outlives it, an architectural decision lasts years"`
 	// Supersedes corrects an existing memory: it leaves default search, this
 	// one replaces it.
 	Supersedes string `json:"supersedes,omitempty" jsonschema:"id of the memory this one corrects"`
@@ -176,6 +182,23 @@ func rateHandler(svc memories.Service) sdk.ToolHandlerFor[rateIn, rateOut] {
 			return nil, rateOut{}, err
 		}
 		return nil, rateOut{OK: true}, nil
+	}
+}
+
+type deleteIn struct {
+	ID string `json:"id"`
+}
+
+type deleteOut struct {
+	OK bool `json:"ok"`
+}
+
+func deleteHandler(svc memories.Service) sdk.ToolHandlerFor[deleteIn, deleteOut] {
+	return func(ctx context.Context, _ *sdk.CallToolRequest, in deleteIn) (*sdk.CallToolResult, deleteOut, error) {
+		if err := svc.Delete(ctx, domain.MemoryID(in.ID)); err != nil {
+			return nil, deleteOut{}, err
+		}
+		return nil, deleteOut{OK: true}, nil
 	}
 }
 

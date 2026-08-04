@@ -4,9 +4,9 @@ Harness-agnostic memory for AI agents. Research results, preferences, decisions,
 
 One binary, `recall`: three long-lived faces behind `recall run`, one-shot commands for everything else.
 
-- **MCP server** — `recall run` (stdio, the default face): `store_memory`, `search_memory`, `get_memory`, `rate_memory`, `pack` in any MCP-capable harness.
+- **MCP server** — `recall run` (stdio, the default face): `store_memory`, `search_memory`, `get_memory`, `rate_memory`, `delete_memory`, `pack` in any MCP-capable harness.
 - **CLI** — `recall memory ...`, for agents that shell out: JSON output when piped, exit code 0/1 with machine-readable errors, never a prompt.
-- **TUI** — `recall run -t`, for humans: browse and live-search, read, rate, prune (delete is TUI-only — agents supersede), correct via a pre-filled supersede editor, review downvoted candidates (`R`), and manage the remote endpoint — all against local or hosted memory alike.
+- **TUI** — `recall run -t`, for humans: browse and live-search, read, rate, prune, correct via a pre-filled supersede editor, review downvoted candidates (`R`), and manage the remote endpoint — all against local or hosted memory alike.
 
 ## Quick start
 
@@ -21,8 +21,9 @@ recall memory pack project:myapp lint           # session bootstrap: ranked cont
 recall memory search go lint --text "golangci"  # ranked summaries; --text layers FTS on top
 recall memory get <id>                          # full content (counts as usage)
 recall memory rate <id> up                      # feedback drives future ranking
-recall memory store --summary "one line" --kind research -k go -k lint "the finding..."
+recall memory store --summary "one line" --kind research -k go -k lint --ttl 2160 "the finding..."
 recall memory store --supersedes <old-id> ...   # corrections replace, never edit
+recall memory delete <id>                       # obsolete beyond correcting: gone for good
 ```
 
 MCP config (any harness):
@@ -54,7 +55,8 @@ Stored memories' `source` becomes the key's name server-side, so shared writes a
 
 - **The memory is global by default**: `~/.local/share/recall/memory.db`, overridable with `RECALL_DB`. Cross-session knowledge is the point.
 - **Concurrent by design**: a harness-connected `recall run` MCP server and CLI calls (yours, subagents', other harnesses') safely share the file — WAL + immediate write transactions underneath. Same machine only; never put the file on NFS.
-- **Agents never edit** — corrections supersede (the old memory keeps existing, drops out of default search, `--all` shows everything). Expiring facts take `--ttl <hours>`.
+- **Agents never edit** — corrections supersede (the old memory keeps existing, drops out of default search, `--all` shows everything); what is obsolete beyond correcting is deleted outright, by agent or human.
+- **Everything expires**: `--ttl <hours>` is required at store time — the writer decides how long the fact stays useful (max 10 years). Expired memories leave default search like superseded ones; `--all` still finds them.
 - **Ranking** = text relevance (FTS5) ⊕ explicit ratings (dominant) ⊕ recency ⊕ access counts. Rate what you use; future agents benefit.
 - **Summaries are required**: search returns summaries, `get` returns bodies — retrieval stays cheap to scan.
 

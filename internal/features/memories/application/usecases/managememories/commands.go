@@ -77,9 +77,9 @@ func (c *StoreCommand) Execute(ctx context.Context, in StoreInput) (domain.Memor
 	return memory.ID(), nil
 }
 
-// DeleteCommand — hard prune, the one destructive operation. Reserved for
-// humans (TUI); agents correct via supersede instead. Dangling
-// superseded_by references to a deleted id are accepted.
+// DeleteCommand — hard prune, the one destructive operation: for memories
+// that should not exist at all, where superseding would only preserve
+// noise. Dangling superseded_by references to a deleted id are accepted.
 type DeleteCommand struct {
 	txManager ddd.TxManager
 	repo      ports.MemoryRepository

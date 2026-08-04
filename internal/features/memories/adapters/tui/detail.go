@@ -90,9 +90,7 @@ func (d *detailModel) header(width int) string {
 
 	meta := fmt.Sprintf("id %s · %s · source %s · ↑%d ↓%d · read %d×",
 		m.ID, m.CreatedAt.Format("2006-01-02"), m.Source, m.VotesUp, m.VotesDown, m.AccessCount)
-	if m.ExpiresAt != nil {
-		meta += " · expires " + m.ExpiresAt.Format("2006-01-02")
-	}
+	meta += " · expires " + m.ExpiresAt.Format("2006-01-02")
 	keywords := "keywords: " + strings.Join(m.Keywords, ", ")
 	lines := []string{title, d.st.dim.Render(meta),
 		highlightFuzzy(keywords, d.findTerms(), d.st.dim, d.st.hit)}

@@ -86,13 +86,14 @@ func New(version string, connect Connect, extra ...*cobra.Command) *cobra.Comman
 func memoryCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "memory",
-		Short: "Store, search, read, rate, and pack memories",
+		Short: "Store, search, read, rate, delete, and pack memories",
 	}
 	cmd.AddCommand(
 		storeCmd(opts, withService),
 		searchCmd(opts, withService),
 		getCmd(opts, withService),
 		rateCmd(opts, withService),
+		deleteCmd(opts, withService),
 		packCmd(withService),
 	)
 	return cmd
@@ -126,11 +127,12 @@ func storeCmd(opts *options, withService func(func(*cobra.Command, []string, mem
 	cmd.Flags().StringVarP(&summary, "summary", "s", "", "one-line summary (required)")
 	cmd.Flags().StringVar(&kind, "kind", "", "fact|preference|research|decision|location|reference (required)")
 	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword (repeatable, at least one)")
-	cmd.Flags().IntVar(&ttlHours, "ttl", 0, "expiry in hours (0 = never)")
+	cmd.Flags().IntVar(&ttlHours, "ttl", 0, "how long this stays useful, in hours (required; e.g. 720 = 30 days, 8760 = a year)")
 	cmd.Flags().StringVar(&supersedes, "supersedes", "", "id of the memory this one corrects")
 	_ = cmd.MarkFlagRequired("summary")
 	_ = cmd.MarkFlagRequired("kind")
 	_ = cmd.MarkFlagRequired("keyword")
+	_ = cmd.MarkFlagRequired("ttl")
 	return cmd
 }
 
@@ -219,6 +221,28 @@ func rateCmd(opts *options, withService func(func(*cobra.Command, []string, memo
 				return err
 			}
 			return emit(cmd, opts, map[string]bool{"ok": true}, "rated "+args[1])
+		}),
+	}
+}
+
+func deleteCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Delete a memory for good — for notes that turned out wrong or obsolete",
+		Long: `Delete a memory permanently. There is no undo and no confirmation
+prompt (agent contract).
+
+Delete is for knowledge that should not exist anymore: a note about code
+that no longer exists, a decision that was reverted, a fact that was never
+true. When the knowledge is still about something real but has changed,
+store the new version with --supersedes instead — the old one keeps its
+history and leaves default search on its own.`,
+		Args: cobra.ExactArgs(1),
+		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
+			if err := svc.Delete(cmd.Context(), domain.MemoryID(args[0])); err != nil {
+				return err
+			}
+			return emit(cmd, opts, map[string]bool{"ok": true}, "deleted "+args[0])
 		}),
 	}
 }

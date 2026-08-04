@@ -371,10 +371,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 	}
 
 	width := max(20, m.Width()-4)
-	date := r.CreatedAt.Format("2006-01-02")
-	if r.ExpiresAt != nil {
-		date += " ⏳" + r.ExpiresAt.Format("2006-01-02")
-	}
+	date := r.CreatedAt.Format("2006-01-02") + " ⏳" + r.ExpiresAt.Format("2006-01-02")
 	keywords := ansi.Truncate(strings.Join(r.Keywords, ", "),
 		max(8, width-len(date)-len(r.Kind)-6), "…")
 	first := fmt.Sprintf("%s %s  %s", d.st.kindBadge(r.Kind),

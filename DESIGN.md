@@ -24,9 +24,11 @@ All faces sit on a small **application facade** with two implementations: *local
 | kind | `fact` / `preference` / `research` / `decision` / `location` / `reference` |
 | keywords | normalized, unlimited; hierarchy conventions live here (`project:go-kernel`, `task:lint`) — **there is no tree** (see below) |
 | source | free-form writer identity (harness/model/session); server mode derives it from the API key |
-| **ttl (hours, optional)** | time-boxed facts ("deploy freeze until Friday"). Expired memories drop out of default search like superseded ones; physical pruning is a later policy |
+| **ttl (hours, required)** | every memory expires — the writer picks the lifetime, there is no "never" (max 10 years). Expired memories drop out of default search like superseded ones; physical pruning is a later policy. *History: ttl was optional (0 = forever) through phase 3; agents defaulted their way past it and the store filled with facts nobody had bounded* |
 | rating signals | up/down votes (explicit feedback via `rate`) + access count / last-accessed (implicit) |
-| supersede link | agents never edit — a correction **supersedes** (new memory pointing at the old, which leaves default search). Humans may hard-edit/delete via TUI |
+| supersede link | agents never edit — a correction **supersedes** (new memory pointing at the old, which leaves default search) |
+
+**Two ways knowledge leaves.** *Supersede* when the topic still exists and what we know about it changed — the old memory keeps its history and drops out of default search. *Delete* when it should never have existed or describes something gone entirely: a hard prune, no undo. Delete is available to every face including agents; the earlier TUI-only stance assumed agents could not judge obsolescence, but the alternative was that nobody did — expiry alone never removes the wrong memories, only the old ones.
 
 **No `Node` tree.** Cut on cold-start grounds: a hierarchy nobody has populated is a hierarchy nobody will query, and everything a `project/task/topic` node would say is already a keyword. Conventional keyword prefixes give hierarchy-like scoping for free and require no ceremony from agents. If real grouping needs emerge, they materialize as *views over keywords*, not schema.
 
@@ -48,7 +50,7 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 
 **Recall pack:** `pack(keywords, budget)` — the one-call version: assembles the top-ranked memories into a single markdown block trimmed to a size budget, ready to drop into context. This is the tool agents will actually reach for at session start.
 
-**Store:** finish work → `store` with content, one-line summary, keywords, kind, optional ttl. **Search-before-store is the convention** (avoid near-duplicates); updating existing knowledge = `store --supersedes <id>`.
+**Store:** finish work → `store` with content, one-line summary, keywords, kind, ttl. **Search-before-store is the convention** (avoid near-duplicates); updating existing knowledge = `store --supersedes <id>`.
 
 **Teach the agents:** `recall prompt` prints a recommended instructions block (when to search, how to store, keyword conventions, rating etiquette) for pasting into a harness's AGENTS.md/CLAUDE.md — the system documents its own usage contract.
 
@@ -71,7 +73,7 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 
 ## Surfaces (sketch)
 
-MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keywords[], ttl_hours?, supersedes?, source)` · `search_memory(query?, keywords[]?, kind?, since?/until?, limit, all?)` · `get_memory(id)` · `rate_memory(id, up|down)` · `pack(keywords[], budget)` · plus CLI-only `recall prompt`, `recall run [-m|-s|-t]`, and the `recall server keys|spaces` admin block.
+MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keywords[], ttl_hours, supersedes?, source)` · `search_memory(query?, keywords[]?, kind?, since?/until?, limit, all?)` · `get_memory(id)` · `rate_memory(id, up|down)` · `delete_memory(id)` · `pack(keywords[], budget)` · plus CLI-only `recall prompt`, `recall run [-m|-s|-t]`, and the `recall server keys|spaces` admin block.
 
 ## MVP → later
 
@@ -79,7 +81,7 @@ MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keyword
 **Phase 2:** TUI (browse, review-candidates view, human edits) · stats/timeline.
 **Phase 3:** hosted mode (`run -s`, API keys, remote facade for all faces).
 **Later:** retention/dedup policies · `SummarizerGateway` consolidation (optional LLM, never required) · export/import · sqlite-vec.
-**Non-goals:** vector DB ambitions, harness-specific integrations beyond MCP + CLI, auto-deletion without human review.
+**Non-goals:** vector DB ambitions, harness-specific integrations beyond MCP + CLI, *background* auto-deletion — pruning is always somebody's explicit call, agent or human, never a policy running behind their back.
 
 ## Open questions
 

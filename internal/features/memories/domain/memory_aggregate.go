@@ -30,6 +30,10 @@ var Kinds = []Kind{KindFact, KindPreference, KindResearch, KindDecision, KindLoc
 const (
 	maxSummaryLength = 200
 	maxKeywordLength = 64
+	// maxTTLHours — ten years. Nothing lives forever, but the far end of
+	// the range is "effectively permanent"; the bound also keeps the value
+	// inside the int32 the wire contract carries.
+	maxTTLHours = 10 * 365 * 24
 )
 
 type memoryState struct {
@@ -39,7 +43,7 @@ type memoryState struct {
 	kind         Kind
 	keywords     []string
 	source       string
-	ttlHours     int // 0 = never expires
+	ttlHours     int // > 0 — every memory expires
 	createdAt    time.Time
 	supersededBy MemoryID // "" = live
 	votesUp      int
@@ -81,7 +85,10 @@ func NewMemory(id MemoryID, content, summary string, kind Kind, keywords []strin
 	if source = strings.TrimSpace(source); source == "" {
 		return nil, &EmptySourceError{}
 	}
-	if ttlHours < 0 {
+	// invariant: every memory expires — the writer picks the lifetime, there
+	// is no "never". Memory that outlives its usefulness is worse than no
+	// memory: it ranks, it gets read, and it misleads.
+	if ttlHours <= 0 || ttlHours > maxTTLHours {
 		return nil, &InvalidTTLError{}
 	}
 
@@ -95,12 +102,9 @@ func NewMemory(id MemoryID, content, summary string, kind Kind, keywords []strin
 
 func (m *Memory) ID() MemoryID { return m.state.id }
 
-// ExpiresAt returns the expiry moment, or zero time when the memory never
-// expires.
+// ExpiresAt returns the expiry moment — always set; a memory without a
+// lifetime cannot exist.
 func (m *Memory) ExpiresAt() time.Time {
-	if m.state.ttlHours == 0 {
-		return time.Time{}
-	}
 	return m.state.createdAt.Add(time.Duration(m.state.ttlHours) * time.Hour)
 }
 

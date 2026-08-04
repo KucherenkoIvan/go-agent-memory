@@ -38,6 +38,9 @@ func mustStore(t *testing.T, svc memories.Service, in managememories.StoreInput)
 	if in.Source == "" {
 		in.Source = "test"
 	}
+	if in.TTLHours == 0 {
+		in.TTLHours = 30 * 24 // required field; cases that care set their own
+	}
 	id, err := svc.Store(context.Background(), in)
 	if err != nil {
 		t.Fatal(err)
@@ -214,7 +217,7 @@ func TestSupersede_LeavesDefaultSearch(t *testing.T) {
 	// superseding an already-superseded memory fails
 	_, err := svc.Store(ctx, managememories.StoreInput{
 		Content: "x", Summary: "x", Kind: "fact", Keywords: []string{"db"},
-		Source: "test", Supersedes: string(old),
+		Source: "test", TTLHours: 24, Supersedes: string(old),
 	})
 	var superseded *domain.MemorySupersededError
 	if !errors.As(err, &superseded) {
@@ -241,8 +244,8 @@ func TestTTL_ExpiredLeavesDefaultSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := oldStore.Execute(ctx, managememories.StoreInput{
-		Content: "permanent fact", Summary: "keeper",
-		Kind: "fact", Keywords: []string{"ops"}, Source: "test",
+		Content: "long-lived fact", Summary: "keeper",
+		Kind: "fact", Keywords: []string{"ops"}, Source: "test", TTLHours: 30 * 24,
 	}); err != nil {
 		t.Fatal(err)
 	}

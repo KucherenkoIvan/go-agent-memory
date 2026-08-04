@@ -60,7 +60,7 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 
 	if !f.IncludeDead {
 		where = append(where, "m.superseded_by IS NULL")
-		where = append(where, "(m.expires_at IS NULL OR m.expires_at > "+arg(nowRFC3339())+")")
+		where = append(where, "m.expires_at > "+arg(nowRFC3339()))
 	}
 	for _, kw := range f.Keywords {
 		where = append(where, "m.pk IN (SELECT memory_pk FROM memory_keywords WHERE keyword = "+arg(kw)+")")
@@ -117,10 +117,9 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 	page := domain.SearchPage{Results: []domain.SearchResult{}}
 	for rows.Next() {
 		var (
-			res       domain.SearchResult
-			keywords  string
-			createdAt string
-			expiresAt sql.NullString
+			res                  domain.SearchResult
+			keywords             string
+			createdAt, expiresAt string
 		)
 		if err := rows.Scan(&res.ID, &res.Summary, &res.Kind, &keywords, &res.Source,
 			&createdAt, &expiresAt, &res.VotesUp, &res.VotesDown, &res.AccessCount,
@@ -131,12 +130,8 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 		if res.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {
 			return domain.SearchPage{}, fmt.Errorf("parsing created_at: %w", err)
 		}
-		if expiresAt.Valid {
-			t, err := time.Parse(time.RFC3339Nano, expiresAt.String)
-			if err != nil {
-				return domain.SearchPage{}, fmt.Errorf("parsing expires_at: %w", err)
-			}
-			res.ExpiresAt = &t
+		if res.ExpiresAt, err = time.Parse(time.RFC3339Nano, expiresAt); err != nil {
+			return domain.SearchPage{}, fmt.Errorf("parsing expires_at: %w", err)
 		}
 		page.Results = append(page.Results, res)
 	}
@@ -149,9 +144,9 @@ func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domai
 		FROM memories WHERE id = $1`, string(id))
 
 	var (
-		model                   domain.MemoryReadModel
-		keywords, createdAt     string
-		expiresAt, supersededBy sql.NullString
+		model                          domain.MemoryReadModel
+		keywords, createdAt, expiresAt string
+		supersededBy                   sql.NullString
 	)
 	err := row.Scan(&model.ID, &model.Content, &model.Summary, &model.Kind, &keywords, &model.Source,
 		&createdAt, &expiresAt, &supersededBy, &model.VotesUp, &model.VotesDown, &model.AccessCount)
@@ -167,12 +162,8 @@ func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domai
 	if model.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {
 		return nil, fmt.Errorf("parsing created_at: %w", err)
 	}
-	if expiresAt.Valid {
-		t, err := time.Parse(time.RFC3339Nano, expiresAt.String)
-		if err != nil {
-			return nil, fmt.Errorf("parsing expires_at: %w", err)
-		}
-		model.ExpiresAt = &t
+	if model.ExpiresAt, err = time.Parse(time.RFC3339Nano, expiresAt); err != nil {
+		return nil, fmt.Errorf("parsing expires_at: %w", err)
 	}
 
 	if bumpAccess {
@@ -208,9 +199,9 @@ func (r *MemoryReader) GetMany(ctx context.Context, tx ddd.Transaction, ids []do
 	models := make([]domain.MemoryReadModel, 0, len(ids))
 	for rows.Next() {
 		var (
-			model                   domain.MemoryReadModel
-			keywords, createdAt     string
-			expiresAt, supersededBy sql.NullString
+			model                          domain.MemoryReadModel
+			keywords, createdAt, expiresAt string
+			supersededBy                   sql.NullString
 		)
 		if err := rows.Scan(&model.ID, &model.Content, &model.Summary, &model.Kind, &keywords, &model.Source,
 			&createdAt, &expiresAt, &supersededBy, &model.VotesUp, &model.VotesDown, &model.AccessCount); err != nil {
@@ -221,12 +212,8 @@ func (r *MemoryReader) GetMany(ctx context.Context, tx ddd.Transaction, ids []do
 		if model.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {
 			return nil, fmt.Errorf("parsing created_at: %w", err)
 		}
-		if expiresAt.Valid {
-			t, err := time.Parse(time.RFC3339Nano, expiresAt.String)
-			if err != nil {
-				return nil, fmt.Errorf("parsing expires_at: %w", err)
-			}
-			model.ExpiresAt = &t
+		if model.ExpiresAt, err = time.Parse(time.RFC3339Nano, expiresAt); err != nil {
+			return nil, fmt.Errorf("parsing expires_at: %w", err)
 		}
 		models = append(models, model)
 	}

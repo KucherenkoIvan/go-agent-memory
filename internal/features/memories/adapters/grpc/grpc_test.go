@@ -82,7 +82,7 @@ func TestRemoteRoundtrip_SourceIsKeyName(t *testing.T) {
 	// store claims source "cli" — the server must override with the key name
 	id, err := client.Store(ctx, managememories.StoreInput{
 		Content: "remote memories work end to end", Summary: "remote e2e",
-		Kind: "fact", Keywords: []string{"e2e", "project:recall"}, Source: "cli",
+		Kind: "fact", Keywords: []string{"e2e", "project:recall"}, Source: "cli", TTLHours: 30 * 24,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func TestRemoteValidation_TypedErrorsAcrossTheWire(t *testing.T) {
 
 	var invalidKind *domain.InvalidKindError
 	_, err := client.Store(ctx, managememories.StoreInput{
-		Content: "x", Summary: "x", Kind: "nonsense", Keywords: []string{"k"},
+		Content: "x", Summary: "x", Kind: "nonsense", Keywords: []string{"k"}, TTLHours: 24,
 	})
 	if !errors.As(err, &invalidKind) {
 		t.Fatalf("invalid kind: %v", err)
@@ -166,7 +166,7 @@ func TestSpaceIsolation_AtTheHandler(t *testing.T) {
 
 	id, err := clientA.Store(ctx, managememories.StoreInput{
 		Content: "secret of space a", Summary: "a's memory",
-		Kind: "fact", Keywords: []string{"shared-keyword"},
+		Kind: "fact", Keywords: []string{"shared-keyword"}, TTLHours: 30 * 24,
 	})
 	if err != nil {
 		t.Fatal(err)

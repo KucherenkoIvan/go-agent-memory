@@ -27,8 +27,9 @@ type Service interface {
 	// match; more matches rank higher) into one context block. text
 	// optionally narrows with a full-text query on top.
 	Recall(ctx context.Context, keywords []string, text string, budgetChars int) (string, error)
-	// Delete hard-prunes a memory. Human faces only (TUI) — never exposed
-	// to agents via MCP; agents correct with supersede instead.
+	// Delete hard-prunes a memory — no undo. For knowledge that should not
+	// exist at all; when the topic survives and only the knowledge changed,
+	// the correction supersedes instead.
 	Delete(ctx context.Context, id domain.MemoryID) error
 }
 

@@ -96,7 +96,7 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 		out = append(out, &recallv1.SearchResult{
 			Id: r.ID, Summary: r.Summary, Kind: r.Kind, Keywords: r.Keywords,
 			Source: r.Source, CreatedAt: timestamppb.New(r.CreatedAt),
-			ExpiresAt: optionalTimestamp(r.ExpiresAt), Snippet: r.Snippet,
+			ExpiresAt: timestamppb.New(r.ExpiresAt), Snippet: r.Snippet,
 			Score: r.Score, VotesUp: int32(r.VotesUp), VotesDown: int32(r.VotesDown), //nolint:gosec // vote counts
 			AccessCount: int32(r.AccessCount), //nolint:gosec // access counts
 		})
@@ -116,7 +116,7 @@ func (h *Handler) Get(ctx context.Context, req *recallv1.GetRequest) (*recallv1.
 	return &recallv1.GetResponse{Memory: &recallv1.Memory{
 		Id: model.ID, Content: model.Content, Summary: model.Summary,
 		Kind: model.Kind, Keywords: model.Keywords, Source: model.Source,
-		CreatedAt: timestamppb.New(model.CreatedAt), ExpiresAt: optionalTimestamp(model.ExpiresAt),
+		CreatedAt: timestamppb.New(model.CreatedAt), ExpiresAt: timestamppb.New(model.ExpiresAt),
 		SupersededBy: model.SupersededBy,
 		VotesUp:      int32(model.VotesUp), VotesDown: int32(model.VotesDown), //nolint:gosec // vote counts
 		AccessCount: int32(model.AccessCount), //nolint:gosec // access counts
@@ -162,11 +162,4 @@ func fromTimestamp(ts *timestamppb.Timestamp) time.Time {
 		return time.Time{}
 	}
 	return ts.AsTime()
-}
-
-func optionalTimestamp(t *time.Time) *timestamppb.Timestamp {
-	if t == nil {
-		return nil
-	}
-	return timestamppb.New(*t)
 }
