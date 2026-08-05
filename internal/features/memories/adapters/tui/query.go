@@ -42,7 +42,11 @@ type searchSpec struct {
 const recentCutoff = 3 * 24 * time.Hour
 
 func (s searchSpec) base() ports.SearchFilters {
-	f := ports.SearchFilters{Kind: s.kind, IncludeDead: s.includeDead}
+	f := ports.SearchFilters{IncludeDead: s.includeDead}
+	if s.kind != "" {
+		// kind is a keyword convention now — the filter is an AND keyword
+		f.Keywords = []string{"kind:" + s.kind}
+	}
 	if s.recent {
 		f.Since = time.Now().Add(-recentCutoff)
 	}

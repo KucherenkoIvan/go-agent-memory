@@ -14,7 +14,7 @@ var now = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func valid(t *testing.T) *domain.Memory {
 	t.Helper()
-	m, err := domain.NewMemory("m-1", "content", "summary", domain.KindFact, []string{"go"}, "test", 24, now)
+	m, err := domain.NewMemory("m-1", "content", "summary", []string{"go"}, "test", 24, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,22 +25,20 @@ func TestNewMemory_Invariants(t *testing.T) {
 	cases := []struct {
 		name                     string
 		content, summary, source string
-		kind                     domain.Kind
 		keywords                 []string
 		ttl                      int
 	}{
-		{"empty content", " ", "s", "src", domain.KindFact, []string{"k"}, 24},
-		{"empty summary", "c", "  ", "src", domain.KindFact, []string{"k"}, 24},
-		{"summary too long", "c", strings.Repeat("x", 300), "src", domain.KindFact, []string{"k"}, 24},
-		{"bad kind", "c", "s", "src", "vibe", []string{"k"}, 24},
-		{"no keywords", "c", "s", "src", domain.KindFact, []string{"  ", ""}, 24},
-		{"empty source", "c", "s", " ", domain.KindFact, []string{"k"}, 24},
-		{"negative ttl", "c", "s", "src", domain.KindFact, []string{"k"}, -1},
-		{"no ttl — nothing lives forever", "c", "s", "src", domain.KindFact, []string{"k"}, 0},
-		{"ttl past the ten-year cap", "c", "s", "src", domain.KindFact, []string{"k"}, 10*365*24 + 1},
+		{"empty content", " ", "s", "src", []string{"k"}, 24},
+		{"empty summary", "c", "  ", "src", []string{"k"}, 24},
+		{"summary too long", "c", strings.Repeat("x", 300), "src", []string{"k"}, 24},
+		{"no keywords", "c", "s", "src", []string{"  ", ""}, 24},
+		{"empty source", "c", "s", " ", []string{"k"}, 24},
+		{"negative ttl", "c", "s", "src", []string{"k"}, -1},
+		{"no ttl — nothing lives forever", "c", "s", "src", []string{"k"}, 0},
+		{"ttl past the ten-year cap", "c", "s", "src", []string{"k"}, 10*365*24 + 1},
 	}
 	for _, tc := range cases {
-		_, err := domain.NewMemory("m-1", tc.content, tc.summary, tc.kind, tc.keywords, tc.source, tc.ttl, now)
+		_, err := domain.NewMemory("m-1", tc.content, tc.summary, tc.keywords, tc.source, tc.ttl, now)
 		if err == nil || !ddd.IsDomainError(err) {
 			t.Errorf("%s: expected domain error, got %v", tc.name, err)
 		}
@@ -48,7 +46,7 @@ func TestNewMemory_Invariants(t *testing.T) {
 }
 
 func TestNewMemory_NormalizationAndEvent(t *testing.T) {
-	m, err := domain.NewMemory("m-1", "content", "  a\nsummary\twith   space  ", domain.KindResearch,
+	m, err := domain.NewMemory("m-1", "content", "  a\nsummary\twith   space  ",
 		[]string{"Go Lint", "go-lint", "  ", "API"}, "test", 12, now)
 	if err != nil {
 		t.Fatal(err)

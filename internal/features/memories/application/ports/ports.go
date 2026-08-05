@@ -26,7 +26,6 @@ type SearchFilters struct {
 	// KeywordsAny keeps memories carrying at least one of these keywords;
 	// each additional match boosts rank. Recall's keyword semantics.
 	KeywordsAny []string
-	Kind        string
 	Since       time.Time
 	Until       time.Time
 	Limit       int

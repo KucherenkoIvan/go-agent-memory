@@ -38,13 +38,13 @@ func (r *MemoryRepository) Save(ctx context.Context, tx ddd.Transaction, memory 
 	}
 
 	_, err := r.db.Resolve(tx).ExecContext(ctx, `
-		INSERT INTO memories (id, content, summary, kind, keywords, source, ttl_hours, expires_at, created_at, superseded_by, votes_up, votes_down)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO memories (id, content, summary, keywords, source, ttl_hours, expires_at, created_at, superseded_by, votes_up, votes_down)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET
 			superseded_by = excluded.superseded_by,
 			votes_up = excluded.votes_up,
 			votes_down = excluded.votes_down`,
-		string(snap.ID), snap.Content, snap.Summary, string(snap.Kind), packKeywords(snap.Keywords),
+		string(snap.ID), snap.Content, snap.Summary, packKeywords(snap.Keywords),
 		snap.Source, snap.TTLHours, expiresAt, snap.CreatedAt.UTC().Format(time.RFC3339Nano),
 		supersededBy, snap.VotesUp, snap.VotesDown)
 	if err != nil {
@@ -78,17 +78,17 @@ func (r *MemoryRepository) Save(ctx context.Context, tx ddd.Transaction, memory 
 
 func (r *MemoryRepository) GetByID(ctx context.Context, tx ddd.Transaction, id domain.MemoryID) (*domain.Memory, error) {
 	row := r.db.Resolve(tx).QueryRowContext(ctx, `
-		SELECT id, content, summary, kind, keywords, source, ttl_hours, created_at, superseded_by, votes_up, votes_down
+		SELECT id, content, summary, keywords, source, ttl_hours, created_at, superseded_by, votes_up, votes_down
 		FROM memories WHERE id = $1`, string(id))
 
 	var (
 		snap         domain.MemorySnapshot
-		rawID, kind  string
+		rawID        string
 		keywords     string
 		createdAt    string
 		supersededBy sql.NullString
 	)
-	err := row.Scan(&rawID, &snap.Content, &snap.Summary, &kind, &keywords, &snap.Source,
+	err := row.Scan(&rawID, &snap.Content, &snap.Summary, &keywords, &snap.Source,
 		&snap.TTLHours, &createdAt, &supersededBy, &snap.VotesUp, &snap.VotesDown)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -98,7 +98,6 @@ func (r *MemoryRepository) GetByID(ctx context.Context, tx ddd.Transaction, id d
 	}
 
 	snap.ID = domain.MemoryID(rawID)
-	snap.Kind = domain.Kind(kind)
 	snap.Keywords = unpackKeywords(keywords)
 	snap.SupersededBy = domain.MemoryID(supersededBy.String)
 	if snap.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {

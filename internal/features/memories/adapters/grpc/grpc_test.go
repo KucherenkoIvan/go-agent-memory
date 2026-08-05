@@ -82,7 +82,7 @@ func TestRemoteRoundtrip_SourceIsKeyName(t *testing.T) {
 	// store claims source "cli" — the server must override with the key name
 	id, err := client.Store(ctx, managememories.StoreInput{
 		Content: "remote memories work end to end", Summary: "remote e2e",
-		Kind: "fact", Keywords: []string{"e2e", "project:recall"}, Source: "cli", TTLHours: 30 * 24,
+		Keywords: []string{"e2e", "project:recall"}, Source: "cli", TTLHours: 30 * 24,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -137,12 +137,20 @@ func TestRemoteValidation_TypedErrorsAcrossTheWire(t *testing.T) {
 	created, _ := keys.Create(ctx, "k", "space-a")
 	client := dial(created.RawToken)
 
-	var invalidKind *domain.InvalidKindError
+	var invalidTTL *domain.InvalidTTLError
 	_, err := client.Store(ctx, managememories.StoreInput{
-		Content: "x", Summary: "x", Kind: "nonsense", Keywords: []string{"k"}, TTLHours: 24,
+		Content: "x", Summary: "x", Keywords: []string{"k"}, // no ttl
 	})
-	if !errors.As(err, &invalidKind) {
-		t.Fatalf("invalid kind: %v", err)
+	if !errors.As(err, &invalidTTL) {
+		t.Fatalf("invalid ttl: %v", err)
+	}
+
+	var noKeywords *domain.NoKeywordsError
+	_, err = client.Store(ctx, managememories.StoreInput{
+		Content: "x", Summary: "x", TTLHours: 24,
+	})
+	if !errors.As(err, &noKeywords) {
+		t.Fatalf("no keywords: %v", err)
 	}
 }
 
@@ -166,7 +174,7 @@ func TestSpaceIsolation_AtTheHandler(t *testing.T) {
 
 	id, err := clientA.Store(ctx, managememories.StoreInput{
 		Content: "secret of space a", Summary: "a's memory",
-		Kind: "fact", Keywords: []string{"shared-keyword"}, TTLHours: 30 * 24,
+		Keywords: []string{"shared-keyword"}, TTLHours: 30 * 24,
 	})
 	if err != nil {
 		t.Fatal(err)

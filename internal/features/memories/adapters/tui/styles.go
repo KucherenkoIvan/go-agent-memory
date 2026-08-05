@@ -50,7 +50,12 @@ func newStyles() *styles {
 	}
 }
 
+// kindBadge renders the kind:* convention when a memory carries one;
+// memories without the tag simply get no badge.
 func (s *styles) kindBadge(kind string) string {
+	if kind == "" {
+		return ""
+	}
 	if style, ok := s.badge[kind]; ok {
 		return style.Render("[" + kind + "]")
 	}

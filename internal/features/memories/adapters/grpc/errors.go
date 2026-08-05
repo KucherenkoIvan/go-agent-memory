@@ -32,8 +32,6 @@ func mapRemoteError(err error) error {
 			return &domain.EmptyContentError{}
 		case (&domain.InvalidSummaryError{}).Error():
 			return &domain.InvalidSummaryError{}
-		case (&domain.InvalidKindError{}).Error():
-			return &domain.InvalidKindError{}
 		case (&domain.NoKeywordsError{}).Error():
 			return &domain.NoKeywordsError{}
 		case (&domain.EmptySourceError{}).Error():

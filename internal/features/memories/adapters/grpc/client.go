@@ -30,7 +30,7 @@ func (c *Client) auth(ctx context.Context) context.Context {
 
 func (c *Client) Store(ctx context.Context, in managememories.StoreInput) (domain.MemoryID, error) {
 	resp, err := c.rpc.Store(c.auth(ctx), &recallv1.StoreRequest{
-		Content: in.Content, Summary: in.Summary, Kind: in.Kind,
+		Content: in.Content, Summary: in.Summary,
 		Keywords: in.Keywords, Source: in.Source,
 		TtlHours:   int32(in.TTLHours), //nolint:gosec // domain caps ttl
 		Supersedes: in.Supersedes,
@@ -51,7 +51,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) (domai
 	}
 	resp, err := c.rpc.Search(c.auth(ctx), &recallv1.SearchRequest{
 		Query: filters.Query, Keywords: filters.Keywords, KeywordsAny: filters.KeywordsAny,
-		Kind: filters.Kind, Since: since, Until: until,
+		Since: since, Until: until,
 		Limit:       int32(filters.Limit),  //nolint:gosec // use-case caps limit
 		Offset:      int32(filters.Offset), //nolint:gosec // non-negative by use-case
 		Order:       filters.Order,
@@ -65,7 +65,7 @@ func (c *Client) Search(ctx context.Context, filters ports.SearchFilters) (domai
 	results := make([]domain.SearchResult, 0, len(resp.GetResults()))
 	for _, r := range resp.GetResults() {
 		results = append(results, domain.SearchResult{
-			ID: r.GetId(), Summary: r.GetSummary(), Kind: r.GetKind(),
+			ID: r.GetId(), Summary: r.GetSummary(),
 			Keywords: r.GetKeywords(), Source: r.GetSource(),
 			CreatedAt: r.GetCreatedAt().AsTime(), ExpiresAt: r.GetExpiresAt().AsTime(),
 			Snippet: r.GetSnippet(), Score: r.GetScore(),
@@ -84,7 +84,7 @@ func (c *Client) Get(ctx context.Context, id domain.MemoryID) (*domain.MemoryRea
 	m := resp.GetMemory()
 	return &domain.MemoryReadModel{
 		ID: m.GetId(), Content: m.GetContent(), Summary: m.GetSummary(),
-		Kind: m.GetKind(), Keywords: m.GetKeywords(), Source: m.GetSource(),
+		Keywords: m.GetKeywords(), Source: m.GetSource(),
 		CreatedAt: m.GetCreatedAt().AsTime(), ExpiresAt: m.GetExpiresAt().AsTime(),
 		SupersededBy: m.GetSupersededBy(),
 		VotesUp:      int(m.GetVotesUp()), VotesDown: int(m.GetVotesDown()),

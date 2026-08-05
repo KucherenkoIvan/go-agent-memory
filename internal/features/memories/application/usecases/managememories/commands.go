@@ -15,7 +15,6 @@ import (
 type StoreInput struct {
 	Content  string
 	Summary  string
-	Kind     string
 	Keywords []string
 	Source   string
 	TTLHours int
@@ -40,7 +39,7 @@ func NewStoreCommand(txManager ddd.TxManager, ids ddd.IDGenerator, clock ddd.Clo
 func (c *StoreCommand) Execute(ctx context.Context, in StoreInput) (domain.MemoryID, error) {
 	memory, err := domain.NewMemory(
 		domain.MemoryID(c.ids.NewID()),
-		in.Content, in.Summary, domain.Kind(in.Kind), in.Keywords, in.Source, in.TTLHours,
+		in.Content, in.Summary, in.Keywords, in.Source, in.TTLHours,
 		c.clock.Now().UTC(),
 	)
 	if err != nil {

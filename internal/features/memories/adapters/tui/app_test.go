@@ -140,7 +140,7 @@ func TestEsc_ClosesTopmostThing_NeverQuits(t *testing.T) {
 
 func sortableResult(id string, created time.Time, votesUp, votesDown, access int) domain.SearchResult {
 	return domain.SearchResult{
-		ID: id, Summary: id, Kind: "fact", Keywords: []string{"k"},
+		ID: id, Summary: id, Keywords: []string{"k"},
 		Source: "test", CreatedAt: created, VotesUp: votesUp, VotesDown: votesDown,
 		AccessCount: access,
 	}
@@ -294,7 +294,7 @@ func TestTimeline_PaginatesToTheEnd(t *testing.T) {
 func TestHelpFooter_FollowsMode(t *testing.T) {
 	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
 	fake.memory = &domain.MemoryReadModel{
-		ID: "m1", Summary: "one", Kind: "fact", Content: "alpha beta gamma",
+		ID: "m1", Summary: "one", Content: "alpha beta gamma",
 		Keywords: []string{"k"}, CreatedAt: time.Now(),
 	}
 	app := newTestApp(fake)
@@ -315,7 +315,7 @@ func TestHelpFooter_FollowsMode(t *testing.T) {
 func TestDetailFind_EscLadder(t *testing.T) {
 	fake := &fakeService{results: []domain.SearchResult{someResult("m1", "one")}}
 	fake.memory = &domain.MemoryReadModel{
-		ID: "m1", Summary: "one", Kind: "fact", Content: "alpha beta gamma",
+		ID: "m1", Summary: "one", Content: "alpha beta gamma",
 		Keywords: []string{"k"}, CreatedAt: time.Now(),
 	}
 	app := newTestApp(fake)
@@ -440,7 +440,7 @@ func TestSupersedeForm_SubmitsCorrection(t *testing.T) {
 		results: []domain.SearchResult{someResult("m1", "old summary")},
 		memory: &domain.MemoryReadModel{
 			ID: "m1", Content: "old content", Summary: "old summary",
-			Kind: "fact", Keywords: []string{"topic"},
+			Keywords: []string{"topic"},
 		},
 		storeID: "m2",
 	}
@@ -493,7 +493,7 @@ func TestSupersedeForm_InheritsLifetime(t *testing.T) {
 		results: []domain.SearchResult{someResult("m1", "old summary")},
 		memory: &domain.MemoryReadModel{
 			ID: "m1", Content: "old content", Summary: "old summary",
-			Kind: "fact", Keywords: []string{"topic"},
+			Keywords:  []string{"topic"},
 			CreatedAt: created, ExpiresAt: created.Add(72 * time.Hour),
 		},
 		storeID: "m2",
@@ -514,7 +514,7 @@ func TestSupersedeForm_InheritsLifetime(t *testing.T) {
 func TestSupersedeForm_DomainErrorLandsOnField(t *testing.T) {
 	fake := &fakeService{
 		results:  []domain.SearchResult{someResult("m1", "s")},
-		memory:   &domain.MemoryReadModel{ID: "m1", Content: "c", Summary: "s", Kind: "fact", Keywords: []string{"k"}},
+		memory:   &domain.MemoryReadModel{ID: "m1", Content: "c", Summary: "s", Keywords: []string{"k"}},
 		storeErr: &domain.InvalidSummaryError{},
 	}
 	app := newTestApp(fake)
@@ -535,7 +535,7 @@ func TestSupersedeForm_DomainErrorLandsOnField(t *testing.T) {
 func TestForm_DiscardConfirmsOnlyWhenDirty(t *testing.T) {
 	fake := &fakeService{
 		results: []domain.SearchResult{someResult("m1", "s")},
-		memory:  &domain.MemoryReadModel{ID: "m1", Content: "c", Summary: "s", Kind: "fact", Keywords: []string{"k"}},
+		memory:  &domain.MemoryReadModel{ID: "m1", Content: "c", Summary: "s", Keywords: []string{"k"}},
 	}
 	app := newTestApp(fake)
 	seed(app, t, fake)
@@ -569,7 +569,7 @@ func TestForm_DiscardConfirmsOnlyWhenDirty(t *testing.T) {
 func TestForm_FindHighlightsFields(t *testing.T) {
 	fake := &fakeService{
 		results: []domain.SearchResult{someResult("m1", "s")},
-		memory:  &domain.MemoryReadModel{ID: "m1", Content: "alpha beta", Summary: "s", Kind: "fact", Keywords: []string{"k"}},
+		memory:  &domain.MemoryReadModel{ID: "m1", Content: "alpha beta", Summary: "s", Keywords: []string{"k"}},
 	}
 	app := newTestApp(fake)
 	seed(app, t, fake)

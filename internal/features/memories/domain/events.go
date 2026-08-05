@@ -11,7 +11,6 @@ const (
 
 type MemoryStoredData struct {
 	MemoryID MemoryID
-	Kind     Kind
 	Keywords []string
 }
 

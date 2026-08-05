@@ -34,7 +34,7 @@ func NewMemoryReader(db *kernelsqlite.Client) *MemoryReader {
 	return &MemoryReader{db: db}
 }
 
-const searchColumns = `m.id, m.summary, m.kind, m.keywords, m.source, m.created_at, m.expires_at, m.votes_up, m.votes_down, m.access_count`
+const searchColumns = `m.id, m.summary, m.keywords, m.source, m.created_at, m.expires_at, m.votes_up, m.votes_down, m.access_count`
 
 func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.SearchFilters) (domain.SearchPage, error) {
 	var (
@@ -77,9 +77,6 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 			strings.Join(placeholders, ", ") + ") GROUP BY memory_pk) mk ON mk.memory_pk = m.pk"
 		score += fmt.Sprintf(" + mk.matches * %v", weightKeyword)
 	}
-	if f.Kind != "" {
-		where = append(where, "m.kind = "+arg(f.Kind))
-	}
 	if !f.Since.IsZero() {
 		where = append(where, "m.created_at >= "+arg(f.Since.UTC().Format(time.RFC3339Nano)))
 	}
@@ -121,7 +118,7 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 			keywords             string
 			createdAt, expiresAt string
 		)
-		if err := rows.Scan(&res.ID, &res.Summary, &res.Kind, &keywords, &res.Source,
+		if err := rows.Scan(&res.ID, &res.Summary, &keywords, &res.Source,
 			&createdAt, &expiresAt, &res.VotesUp, &res.VotesDown, &res.AccessCount,
 			&res.Snippet, &res.Score, &page.Total); err != nil {
 			return domain.SearchPage{}, fmt.Errorf("scanning search result: %w", err)
@@ -140,7 +137,7 @@ func (r *MemoryReader) Search(ctx context.Context, tx ddd.Transaction, f ports.S
 
 func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domain.MemoryID, bumpAccess bool) (*domain.MemoryReadModel, error) {
 	row := r.db.Resolve(tx).QueryRowContext(ctx, `
-		SELECT id, content, summary, kind, keywords, source, created_at, expires_at, superseded_by, votes_up, votes_down, access_count
+		SELECT id, content, summary, keywords, source, created_at, expires_at, superseded_by, votes_up, votes_down, access_count
 		FROM memories WHERE id = $1`, string(id))
 
 	var (
@@ -148,7 +145,7 @@ func (r *MemoryReader) GetFull(ctx context.Context, tx ddd.Transaction, id domai
 		keywords, createdAt, expiresAt string
 		supersededBy                   sql.NullString
 	)
-	err := row.Scan(&model.ID, &model.Content, &model.Summary, &model.Kind, &keywords, &model.Source,
+	err := row.Scan(&model.ID, &model.Content, &model.Summary, &keywords, &model.Source,
 		&createdAt, &expiresAt, &supersededBy, &model.VotesUp, &model.VotesDown, &model.AccessCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -189,7 +186,7 @@ func (r *MemoryReader) GetMany(ctx context.Context, tx ddd.Transaction, ids []do
 		args[i] = string(id)
 	}
 	rows, err := r.db.Resolve(tx).QueryContext(ctx, `
-		SELECT id, content, summary, kind, keywords, source, created_at, expires_at, superseded_by, votes_up, votes_down, access_count
+		SELECT id, content, summary, keywords, source, created_at, expires_at, superseded_by, votes_up, votes_down, access_count
 		FROM memories WHERE id IN (`+strings.Join(placeholders, ", ")+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("reading memories: %w", err)
@@ -203,7 +200,7 @@ func (r *MemoryReader) GetMany(ctx context.Context, tx ddd.Transaction, ids []do
 			keywords, createdAt, expiresAt string
 			supersededBy                   sql.NullString
 		)
-		if err := rows.Scan(&model.ID, &model.Content, &model.Summary, &model.Kind, &keywords, &model.Source,
+		if err := rows.Scan(&model.ID, &model.Content, &model.Summary, &keywords, &model.Source,
 			&createdAt, &expiresAt, &supersededBy, &model.VotesUp, &model.VotesDown, &model.AccessCount); err != nil {
 			return nil, fmt.Errorf("scanning memory: %w", err)
 		}

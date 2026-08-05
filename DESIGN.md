@@ -7,7 +7,7 @@ Local-first: the memory **is one `.db` file**, no daemon required. Optionally ho
 ## Faces
 
 - **MCP server** (`recall run`, stdio, the default face) — the flagship adapter: one config line in any MCP-capable harness.
-- **CLI** (`recall memory store|search|get|rate|pack ...`) — for harnesses that shell out: one-shot commands, stable JSON output, exit codes, no prompts. Search/pack keywords are positional and OR-match; `--text` layers FTS on top.
+- **CLI** (`recall memory store|search|get|rate|delete|pack ...`) — for harnesses that shell out: one-shot commands, stable JSON output, exit codes, no prompts. Search/pack keywords are positional and OR-match; `--text` layers FTS on top.
 - **TUI** (`recall run -t`) — the human face: browse, search, read, correct, prune.
 - **Server** (`recall run -s`) — gRPC hosting for shared/team memory, administered via `recall server keys|spaces`; see Remote mode.
 
@@ -21,14 +21,15 @@ All faces sit on a small **application facade** with two implementations: *local
 |---|---|
 | content | markdown, non-empty |
 | **summary** | one line; what search results show — agents scan summaries cheaply, then `get` the full body |
-| kind | `fact` / `preference` / `research` / `decision` / `location` / `reference` |
-| keywords | normalized, unlimited; hierarchy conventions live here (`project:go-kernel`, `task:lint`) — **there is no tree** (see below) |
+| keywords | normalized, unlimited; the only classification axis. Conventions live here (`project:go-kernel`, `task:lint`, `kind:decision`) — **there is no tree** (see below) |
 | source | free-form writer identity (harness/model/session); server mode derives it from the API key |
 | **ttl (hours, required)** | every memory expires — the writer picks the lifetime, there is no "never" (max 10 years). Expired memories drop out of default search like superseded ones; physical pruning is a later policy. *History: ttl was optional (0 = forever) through phase 3; agents defaulted their way past it and the store filled with facts nobody had bounded* |
 | rating signals | up/down votes (explicit feedback via `rate`) + access count / last-accessed (implicit) |
 | supersede link | agents never edit — a correction **supersedes** (new memory pointing at the old, which leaves default search) |
 
 **Two ways knowledge leaves.** *Supersede* when the topic still exists and what we know about it changed — the old memory keeps its history and drops out of default search. *Delete* when it should never have existed or describes something gone entirely: a hard prune, no undo. Delete is available to every face including agents; the earlier TUI-only stance assumed agents could not judge obsolescence, but the alternative was that nobody did — expiry alone never removes the wrong memories, only the old ones.
+
+**No `kind` column.** Cut once the store was a few hundred memories deep: it was required on every write, closed to six values, and read by nothing that ranks — absent from the score, it could only narrow a search nobody narrowed. Every classification it carried survives as a `kind:*` keyword (migration 0005 folds them in), where it is free-form, multi-valued, and full-text searchable like everything else. Human faces still offer the conventional tags as a browsing filter; nothing validates them.
 
 **No `Node` tree.** Cut on cold-start grounds: a hierarchy nobody has populated is a hierarchy nobody will query, and everything a `project/task/topic` node would say is already a keyword. Conventional keyword prefixes give hierarchy-like scoping for free and require no ceremony from agents. If real grouping needs emerge, they materialize as *views over keywords*, not schema.
 
@@ -50,7 +51,7 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 
 **Recall pack:** `pack(keywords, budget)` — the one-call version: assembles the top-ranked memories into a single markdown block trimmed to a size budget, ready to drop into context. This is the tool agents will actually reach for at session start.
 
-**Store:** finish work → `store` with content, one-line summary, keywords, kind, ttl. **Search-before-store is the convention** (avoid near-duplicates); updating existing knowledge = `store --supersedes <id>`.
+**Store:** finish work → `store` with content, one-line summary, keywords, ttl. **Search-before-store is the convention** (avoid near-duplicates); updating existing knowledge = `store --supersedes <id>`.
 
 **Teach the agents:** `recall prompt` prints a recommended instructions block (when to search, how to store, keyword conventions, rating etiquette) for pasting into a harness's AGENTS.md/CLAUDE.md — the system documents its own usage contract.
 
@@ -73,9 +74,11 @@ Explicit feedback dominates implicit: a memory that agents *said* helped outrank
 
 ## Surfaces (sketch)
 
-MCP tools / CLI subcommands (1:1): `store_memory(content, summary, kind, keywords[], ttl_hours, supersedes?, source)` · `search_memory(query?, keywords[]?, kind?, since?/until?, limit, all?)` · `get_memory(id)` · `rate_memory(id, up|down)` · `delete_memory(id)` · `pack(keywords[], budget)` · plus CLI-only `recall prompt`, `recall run [-m|-s|-t]`, and the `recall server keys|spaces` admin block.
+MCP tools / CLI subcommands (1:1): `store_memory(content, summary, keywords[], ttl_hours, supersedes?, source)` · `search_memory(query?, keywords[]?, since?/until?, limit, all?)` · `get_memory(ids[])` · `rate_memory(ids[], up|down)` · `delete_memory(id)` · `pack(keywords[], budget)` · plus CLI-only `recall prompt`, `recall run [-m|-s|-t]`, and the `recall server keys|spaces` admin block.
 
 ## MVP → later
+
+**Context cost is a design constraint.** The MCP face is measured, not guessed: tool schemas and instructions are paid once per session, every response is paid per call, and a model is the only consumer. So tools answer in plain text (the SDK's structured output would ship every payload twice), search returns only what decides "fetch this?" — id, summary, keywords, snippet — while get returns the rest, policy lives once in the instructions block instead of being restated in six tool descriptions, and get/rate take batches. Measured at the change: ~9.4 KB of session preamble and 5.8 KB per five-result search before; roughly a third of that after.
 
 **MVP (local):** `Memory` aggregate with summary/ttl/rating fields · FTS5 ranked search with all filters · supersede · `store/search/get/rate/recall` over MCP + CLI · `recall prompt`. **Proof of done:** an agent stores research via MCP; a different harness finds it via CLI, ranked sensibly.
 **Phase 2:** TUI (browse, review-candidates view, human edits) · stats/timeline.

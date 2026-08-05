@@ -10,10 +10,6 @@ type InvalidSummaryError struct{ ddd.DomainError }
 
 func (e *InvalidSummaryError) Error() string { return "invalid_summary" }
 
-type InvalidKindError struct{ ddd.DomainError }
-
-func (e *InvalidKindError) Error() string { return "invalid_kind" }
-
 type NoKeywordsError struct{ ddd.DomainError }
 
 func (e *NoKeywordsError) Error() string { return "no_keywords" }

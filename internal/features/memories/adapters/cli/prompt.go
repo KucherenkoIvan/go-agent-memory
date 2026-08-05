@@ -2,44 +2,42 @@ package cli
 
 // agentPrompt is what `recall prompt` prints — the usage contract to paste
 // into a harness's AGENTS.md/CLAUDE.md. The system documents itself.
+//
+// Keep it short. Harnesses running the MCP face already receive this policy
+// in the server's instructions block; every line here is a line paid for in
+// every session of every agent that pastes it.
 const agentPrompt = `## Persistent memory (recall)
 
-A shared memory survives across sessions, models, and harnesses. Use it via the ` + "`recall`" + ` CLI (or the equivalent MCP tools if configured). You may be asked to use it explicitly, but you do not need to be — rate what you used and store what you learned on your own initiative.
+A shared memory survives across sessions, models, and harnesses. Use it on your own initiative — you do not need to be asked. (Configured as an MCP server? The tools carry this policy already; keep this block short or drop it.)
 
-**When past work plausibly touched your task** (familiar project, recent changes led here, the issue sounds recurrent) — recall what earlier agents learned. Skip this on clearly fresh ground; a reflexive pack pulls irrelevant context in:
+**Recall what past agents learned** when the task plausibly touches earlier work — a familiar project, recent changes that led here, a recurrent-sounding issue. Skip it on fresh ground:
 
     recall memory pack <topic> <topic>...        # ranked memories as one block
     recall memory search <topic>... [--text "…"] # or browse summaries first
 
-Keywords OR-match in both: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. --text layers a full-text query over the keyword results; --and (search only) requires every keyword when you need to narrow hard. Page big result sets with --offset (stable order); --order swaps relevance for a display order (created_asc|created_desc|rating_asc|rating_desc|reads_asc|reads_desc).
+Keywords OR-match in both: throw in every candidate topic (project, task, technology) — memories matching more of them rank higher. --text layers a full-text query on top; --and requires every keyword; --offset pages; --order swaps relevance for created_asc|created_desc|rating_asc|rating_desc|reads_asc|reads_desc. Search again mid-session when the work shifts — the opening pack does not cover topics that came up later.
 
-Search again mid-session when the work shifts to a new problem — the opening pack does not cover topics that emerged later.
+**Rate what you relied on** — ratings drive ranking for everyone:
 
-If recall returns nothing relevant, fall back to your harness's builtin memory for reading (if you have one) — and store anything useful you find there into recall so it is shared next time.
+    recall memory rate <id>... up      # correct and helpful
+    recall memory rate <id>... down    # wrong or misleading
 
-**When you rely on a memory** — rate it afterwards; ratings drive ranking for future agents:
+**Store the moment you learn something durable** — a root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location. Not at end-of-session: compaction loses findings. Search first to avoid duplicates:
 
-    recall memory rate <id> up      # it was correct and helped
-    recall memory rate <id> down    # it was wrong or misleading
+    recall memory store --summary "<one line>" -k <topic> -k <topic> --ttl <hours> \
+      [--supersedes <id>] "<content>"
 
-**When you learn something durable** — a confirmed root cause, an environment or tooling gotcha, a decision and its why, a stated preference, a location of something — store it at that moment, not at end-of-session (wrap-up and context compaction both lose findings). Search first to avoid duplicates:
+**Prune what should not exist** — the code or process it describes is gone, the decision was reverted, it was never true:
 
-    recall memory store --summary "<one line>" --kind <fact|preference|research|decision|location|reference> \
-      -k <topic> -k <topic> --ttl <hours> [--supersedes <id>] "<content>"
-
-**When a memory turns out to be obsolete** — the code, tool, or process it describes is gone, the decision was reverted, the fact was never true — delete it. Nothing is gained by leaving it to rank and mislead:
-
-    recall memory delete <id>
-
-Deletion is permanent and unconfirmed. Reach for --supersedes instead whenever the topic still exists and only what you know about it changed.
+    recall memory delete <id>          # permanent, unconfirmed
 
 Rules:
-- if your harness has builtin memory, recall is the primary store: durable findings go here even when they would also fit the builtin one — recall is shared, the builtin is not. Reserve builtin memory for harness-specific operating notes.
-- prefer small, focused memories: each should cover one self-contained finding or topic, with sharp keywords. Split a sprawling write-up into several notes — search and ranking reassemble them better than one document.
+- if your harness has builtin memory, recall is still the primary store: it is shared, the builtin is not.
+- keep memories small and single-topic with sharp keywords — search reassembles them better than one long note.
 - summary is required: one line, it is what future agents see in search results.
-- keywords: lowercase topics; use prefixes for scoping, e.g. project:myapp, task:lint.
+- keywords are lowercase and free-form; kind:decision, project:myapp, task:lint are conventions, not a vocabulary.
+- --ttl is required: how long the fact stays true (720 = 30 days, 8760 = a year, max 10 years). Expired memories leave default search; --all brings them back.
+- supersede when knowledge changed (--supersedes <old-id>), delete when the subject is gone. Never duplicate.
 - never store secrets or credentials.
-- to correct an existing memory, store the correction with --supersedes <old-id> — do not duplicate.
-- --ttl is required: how long the fact stays useful, in hours (720 = 30 days, 2160 = a quarter, 8760 = a year, max 10 years). Judge it from the fact itself — a sprint detail dies with the sprint, a root cause outlives it, an architectural decision lasts years. Expired memories leave default search; --all brings them back.
-- output is JSON when piped; exit code 0 = success, 1 = error (JSON on stderr).
-- fetch full content with: recall memory get <id>`
+- output is JSON when piped; exit 0 = success, 1 = error (JSON on stderr).
+- full content: recall memory get <id>...`

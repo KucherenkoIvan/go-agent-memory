@@ -86,7 +86,7 @@ func (d *detailModel) bumpVotes(up bool) {
 
 func (d *detailModel) header(width int) string {
 	m := d.m
-	title := fmt.Sprintf("%s %s", d.st.kindBadge(m.Kind), d.st.title.Render(m.Summary))
+	title := fmt.Sprintf("%s %s", d.st.kindBadge(domain.KindOf(m.Keywords)), d.st.title.Render(m.Summary))
 
 	meta := fmt.Sprintf("id %s · %s · source %s · ↑%d ↓%d · read %d×",
 		m.ID, m.CreatedAt.Format("2006-01-02"), m.Source, m.VotesUp, m.VotesDown, m.AccessCount)

@@ -114,9 +114,9 @@ func (q *RecallQuery) Execute(ctx context.Context, keywords []string, text strin
 			continue
 		}
 
-		entry := fmt.Sprintf("## [%s] %s\n_id: %s · %s · keywords: %s_\n\n%s\n\n",
-			full.Kind, full.Summary, full.ID,
-			full.CreatedAt.Format("2006-01-02"), strings.Join(full.Keywords, ", "),
+		entry := fmt.Sprintf("## %s\n_id: %s · %s · %s_\n\n%s\n\n",
+			full.Summary, full.ID,
+			full.CreatedAt.Format("2006-01-02"), strings.Join(full.Keywords, " "),
 			full.Content)
 
 		if b.Len()+len(entry) > budgetChars && included > 0 {

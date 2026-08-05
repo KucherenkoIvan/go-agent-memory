@@ -101,9 +101,9 @@ func memoryCmd(opts *options, withService func(func(*cobra.Command, []string, me
 
 func storeCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	var (
-		summary, kind, supersedes string
-		keywords                  []string
-		ttlHours                  int
+		summary, supersedes string
+		keywords            []string
+		ttlHours            int
 	)
 	cmd := &cobra.Command{
 		Use:   "store [content]",
@@ -115,7 +115,7 @@ func storeCmd(opts *options, withService func(func(*cobra.Command, []string, mem
 				return err
 			}
 			id, err := svc.Store(cmd.Context(), managememories.StoreInput{
-				Content: content, Summary: summary, Kind: kind, Keywords: keywords,
+				Content: content, Summary: summary, Keywords: keywords,
 				Source: opts.source, TTLHours: ttlHours, Supersedes: supersedes,
 			})
 			if err != nil {
@@ -125,12 +125,10 @@ func storeCmd(opts *options, withService func(func(*cobra.Command, []string, mem
 		}),
 	}
 	cmd.Flags().StringVarP(&summary, "summary", "s", "", "one-line summary (required)")
-	cmd.Flags().StringVar(&kind, "kind", "", "fact|preference|research|decision|location|reference (required)")
-	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword (repeatable, at least one)")
+	cmd.Flags().StringArrayVarP(&keywords, "keyword", "k", nil, "keyword (repeatable, at least one); kind:fact, project:x, task:y are conventions")
 	cmd.Flags().IntVar(&ttlHours, "ttl", 0, "how long this stays useful, in hours (required; e.g. 720 = 30 days, 8760 = a year)")
 	cmd.Flags().StringVar(&supersedes, "supersedes", "", "id of the memory this one corrects")
 	_ = cmd.MarkFlagRequired("summary")
-	_ = cmd.MarkFlagRequired("kind")
 	_ = cmd.MarkFlagRequired("keyword")
 	_ = cmd.MarkFlagRequired("ttl")
 	return cmd
@@ -138,9 +136,9 @@ func storeCmd(opts *options, withService func(func(*cobra.Command, []string, mem
 
 func searchCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	var (
-		text, kind, since, until, order string
-		limit, offset                   int
-		all, and                        bool
+		text, since, until, order string
+		limit, offset             int
+		all, and                  bool
 	)
 	cmd := &cobra.Command{
 		Use:   "search [keyword]...",
@@ -150,14 +148,15 @@ func searchCmd(opts *options, withService func(func(*cobra.Command, []string, me
 Positional arguments are keywords: any may match, and every additional
 match boosts a memory's rank (the same semantics pack uses). --text
 layers a full-text query over the keyword results. No arguments at all
-returns the recent timeline.
+returns the recent timeline. Conventional prefixes are ordinary keywords:
+kind:decision, project:myapp, task:lint.
 
 --offset pages through results (ordering is stable — pages never
 duplicate or drop rows); --order swaps relevance ranking for a display
 order: created_asc, created_desc, rating_asc, rating_desc, reads_asc,
 reads_desc.`,
 		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
-			filters := ports.SearchFilters{Query: text, Kind: kind, Limit: limit, Offset: offset, Order: order, IncludeDead: all}
+			filters := ports.SearchFilters{Query: text, Limit: limit, Offset: offset, Order: order, IncludeDead: all}
 			if and {
 				filters.Keywords = args
 			} else {
@@ -180,7 +179,6 @@ reads_desc.`,
 	}
 	cmd.Flags().StringVar(&text, "text", "", "full-text query layered on the keyword results")
 	cmd.Flags().BoolVar(&and, "and", false, "require every keyword to match instead of any")
-	cmd.Flags().StringVar(&kind, "kind", "", "kind filter")
 	cmd.Flags().StringVar(&since, "since", "", "created after (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().StringVar(&until, "until", "", "created before (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 0, "max results (default 20)")
@@ -192,35 +190,50 @@ reads_desc.`,
 
 func getCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	return &cobra.Command{
-		Use:   "get <id>",
-		Short: "Fetch a memory's full content",
-		Args:  cobra.ExactArgs(1),
+		Use:   "get <id>...",
+		Short: "Fetch full content — several ids in one call",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
-			model, err := svc.Get(cmd.Context(), domain.MemoryID(args[0]))
-			if err != nil {
-				return err
+			models := make([]*domain.MemoryReadModel, 0, len(args))
+			texts := make([]string, 0, len(args))
+			for _, id := range args {
+				model, err := svc.Get(cmd.Context(), domain.MemoryID(id))
+				if err != nil {
+					return err
+				}
+				models = append(models, model)
+				texts = append(texts, formatMemory(model))
 			}
-			text := fmt.Sprintf("[%s] %s\nid: %s · %s · keywords: %s\n\n%s",
-				model.Kind, model.Summary, model.ID,
-				model.CreatedAt.Format("2006-01-02"), strings.Join(model.Keywords, ", "), model.Content)
-			return emit(cmd, opts, model, text)
+			if len(models) == 1 {
+				return emit(cmd, opts, models[0], texts[0]) // single id keeps the bare object
+			}
+			return emit(cmd, opts, map[string]any{"memories": models}, strings.Join(texts, "\n\n---\n\n"))
 		}),
 	}
 }
 
+func formatMemory(m *domain.MemoryReadModel) string {
+	return fmt.Sprintf("%s\nid: %s · %s · keywords: %s\n\n%s",
+		m.Summary, m.ID, m.CreatedAt.Format("2006-01-02"),
+		strings.Join(m.Keywords, ", "), m.Content)
+}
+
 func rateCmd(opts *options, withService func(func(*cobra.Command, []string, memories.Service) error) func(*cobra.Command, []string) error) *cobra.Command {
 	return &cobra.Command{
-		Use:   "rate <id> <up|down>",
-		Short: "Rate a memory after using it — ratings drive ranking",
-		Args:  cobra.ExactArgs(2),
+		Use:   "rate <id>... <up|down>",
+		Short: "Rate memories after using them — ratings drive ranking",
+		Args:  cobra.MinimumNArgs(2),
 		RunE: withService(func(cmd *cobra.Command, args []string, svc memories.Service) error {
-			if args[1] != "up" && args[1] != "down" {
-				return fmt.Errorf("verdict must be up or down, got %q", args[1])
+			ids, verdict := args[:len(args)-1], args[len(args)-1]
+			if verdict != "up" && verdict != "down" {
+				return fmt.Errorf("verdict must be up or down, got %q", verdict)
 			}
-			if err := svc.Rate(cmd.Context(), domain.MemoryID(args[0]), args[1] == "up"); err != nil {
-				return err
+			for _, id := range ids {
+				if err := svc.Rate(cmd.Context(), domain.MemoryID(id), verdict == "up"); err != nil {
+					return err
+				}
 			}
-			return emit(cmd, opts, map[string]bool{"ok": true}, "rated "+args[1])
+			return emit(cmd, opts, map[string]bool{"ok": true}, fmt.Sprintf("rated %d %s", len(ids), verdict))
 		}),
 	}
 }
@@ -311,8 +324,8 @@ func formatResults(results []domain.SearchResult) string {
 	}
 	var b strings.Builder
 	for _, r := range results {
-		fmt.Fprintf(&b, "%s  [%s] %s\n    %s · %s · ↑%d ↓%d\n",
-			r.ID, r.Kind, r.Summary,
+		fmt.Fprintf(&b, "%s  %s\n    %s · %s · ↑%d ↓%d\n",
+			r.ID, r.Summary,
 			r.CreatedAt.Format("2006-01-02"), strings.Join(r.Keywords, ", "), r.VotesUp, r.VotesDown)
 	}
 	return strings.TrimRight(b.String(), "\n")

@@ -53,14 +53,14 @@ func TestStoreSearchGet_EndToEnd(t *testing.T) {
 	ctx := context.Background()
 
 	id := mustStore(t, svc, managememories.StoreInput{
-		Content: "golangci-lint v2 config uses version: \"2\" and a linters.default set",
-		Summary: "golangci-lint v2 config format basics",
-		Kind:    "research", Keywords: []string{"go", "lint", "project:kernel"},
+		Content:  "golangci-lint v2 config uses version: \"2\" and a linters.default set",
+		Summary:  "golangci-lint v2 config format basics",
+		Keywords: []string{"go", "lint", "project:kernel"},
 	})
 	mustStore(t, svc, managememories.StoreInput{
-		Content: "the user prefers tabs",
-		Summary: "indentation preference",
-		Kind:    "preference", Keywords: []string{"style"},
+		Content:  "the user prefers tabs",
+		Summary:  "indentation preference",
+		Keywords: []string{"style", "kind:preference"},
 	})
 
 	// FTS query finds the right one, with snippet and keywords intact
@@ -81,10 +81,10 @@ func TestStoreSearchGet_EndToEnd(t *testing.T) {
 		t.Fatalf("keyword results: %+v", results)
 	}
 
-	// kind filter
-	results, _ = searchResults(svc, ctx, ports.SearchFilters{Kind: "preference"})
-	if len(results) != 1 || results[0].Kind != "preference" {
-		t.Fatalf("kind results: %+v", results)
+	// kind is a keyword now — the old --kind filter is an ordinary AND keyword
+	results, _ = searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"kind:preference"}})
+	if len(results) != 1 || results[0].Summary != "indentation preference" {
+		t.Fatalf("kind:* keyword results: %+v", results)
 	}
 
 	// get returns full content and bumps the access count
@@ -114,7 +114,7 @@ func TestSearch_OrderAndOffset_PaginateStably(t *testing.T) {
 	for _, name := range []string{"first", "second", "third"} {
 		mustStore(t, svc, managememories.StoreInput{
 			Content: name + " body", Summary: name + " notes",
-			Kind: "fact", Keywords: []string{"paging"},
+			Keywords: []string{"paging"},
 		})
 	}
 
@@ -157,14 +157,14 @@ func TestRating_DrivesRanking(t *testing.T) {
 	ctx := context.Background()
 
 	first := mustStore(t, svc, managememories.StoreInput{
-		Content: "use depguard for lint architecture rules",
-		Summary: "lint: depguard for layer rules",
-		Kind:    "research", Keywords: []string{"lint"},
+		Content:  "use depguard for lint architecture rules",
+		Summary:  "lint: depguard for layer rules",
+		Keywords: []string{"lint"},
 	})
 	second := mustStore(t, svc, managememories.StoreInput{
-		Content: "lint runs via make lint",
-		Summary: "lint: how to run",
-		Kind:    "fact", Keywords: []string{"lint"},
+		Content:  "lint runs via make lint",
+		Summary:  "lint: how to run",
+		Keywords: []string{"lint"},
 	})
 
 	for range 3 {
@@ -192,11 +192,11 @@ func TestSupersede_LeavesDefaultSearch(t *testing.T) {
 
 	old := mustStore(t, svc, managememories.StoreInput{
 		Content: "the db lives at /old/path", Summary: "db location",
-		Kind: "location", Keywords: []string{"db"},
+		Keywords: []string{"db"},
 	})
 	newer := mustStore(t, svc, managememories.StoreInput{
 		Content: "the db lives at /new/path", Summary: "db location (corrected)",
-		Kind: "location", Keywords: []string{"db"}, Supersedes: string(old),
+		Keywords: []string{"db"}, Supersedes: string(old),
 	})
 
 	results, _ := searchResults(svc, ctx, ports.SearchFilters{Keywords: []string{"db"}})
@@ -216,7 +216,7 @@ func TestSupersede_LeavesDefaultSearch(t *testing.T) {
 
 	// superseding an already-superseded memory fails
 	_, err := svc.Store(ctx, managememories.StoreInput{
-		Content: "x", Summary: "x", Kind: "fact", Keywords: []string{"db"},
+		Content: "x", Summary: "x", Keywords: []string{"db"},
 		Source: "test", TTLHours: 24, Supersedes: string(old),
 	})
 	var superseded *domain.MemorySupersededError
@@ -239,13 +239,13 @@ func TestTTL_ExpiredLeavesDefaultSearch(t *testing.T) {
 
 	if _, err := oldStore.Execute(ctx, managememories.StoreInput{
 		Content: "freeze until yesterday", Summary: "temporary freeze",
-		Kind: "fact", Keywords: []string{"ops"}, Source: "test", TTLHours: 1, // expired 47h ago
+		Keywords: []string{"ops"}, Source: "test", TTLHours: 1, // expired 47h ago
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := oldStore.Execute(ctx, managememories.StoreInput{
 		Content: "long-lived fact", Summary: "keeper",
-		Kind: "fact", Keywords: []string{"ops"}, Source: "test", TTLHours: 30 * 24,
+		Keywords: []string{"ops"}, Source: "test", TTLHours: 30 * 24,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestDelete_RemovesForGood(t *testing.T) {
 
 	id := mustStore(t, svc, managememories.StoreInput{
 		Content: "obsolete garbage", Summary: "to be pruned",
-		Kind: "fact", Keywords: []string{"prune-me"},
+		Keywords: []string{"prune-me"},
 	})
 
 	if err := svc.Delete(ctx, id); err != nil {
@@ -323,7 +323,7 @@ func TestKeywordMirror_IdempotentAcrossResaves(t *testing.T) {
 
 	id := mustStore(t, svc, managememories.StoreInput{
 		Content: "keyword mirror subject", Summary: "mirror notes",
-		Kind: "fact", Keywords: []string{"mirror-kw", "project:mirror"},
+		Keywords: []string{"mirror-kw", "project:mirror"},
 	})
 
 	// rate and supersede both re-save the row; the mirror must not
@@ -333,7 +333,7 @@ func TestKeywordMirror_IdempotentAcrossResaves(t *testing.T) {
 	}
 	mustStore(t, svc, managememories.StoreInput{
 		Content: "corrected subject", Summary: "mirror notes v2",
-		Kind: "fact", Keywords: []string{"mirror-kw"}, Supersedes: string(id),
+		Keywords: []string{"mirror-kw"}, Supersedes: string(id),
 	})
 
 	var linkRows int
@@ -363,7 +363,7 @@ func TestRecall_AssemblesWithinBudget(t *testing.T) {
 	for i, name := range []string{"alpha", "beta", "gamma"} {
 		id := mustStore(t, svc, managememories.StoreInput{
 			Content: strings.Repeat(name+" ", 30),
-			Summary: name + " notes", Kind: "research", Keywords: []string{"recall-test"},
+			Summary: name + " notes", Keywords: []string{"recall-test"},
 		})
 		for range 3 - i { // alpha most upvoted
 			_ = svc.Rate(ctx, id, true)
@@ -403,15 +403,15 @@ func TestRecall_KeywordsORMatch_MoreMatchesRankHigher(t *testing.T) {
 
 	mustStore(t, svc, managememories.StoreInput{
 		Content: "only the go keyword", Summary: "go-only notes",
-		Kind: "fact", Keywords: []string{"go"},
+		Keywords: []string{"go"},
 	})
 	mustStore(t, svc, managememories.StoreInput{
 		Content: "only the project keyword", Summary: "project-only notes",
-		Kind: "fact", Keywords: []string{"project:app"},
+		Keywords: []string{"project:app"},
 	})
 	mustStore(t, svc, managememories.StoreInput{
 		Content: "both keywords", Summary: "both notes",
-		Kind: "fact", Keywords: []string{"go", "project:app"},
+		Keywords: []string{"go", "project:app"},
 	})
 
 	// any keyword qualifies — unknown ones don't empty the result

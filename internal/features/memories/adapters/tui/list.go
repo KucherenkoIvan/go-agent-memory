@@ -263,7 +263,7 @@ func (m *listModel) removeItem(id string) {
 	}
 }
 
-// cycleKind rotates the kind filter: all → fact → … → reference → all.
+// cycleKind rotates the kind:* keyword filter: all → fact → … → all.
 func (m *listModel) cycleKind() {
 	ring := append([]string{""}, kindStrings()...)
 	m.kind = ring[(slices.Index(ring, m.kind)+1)%len(ring)]
@@ -275,10 +275,12 @@ func (m *listModel) cycleSort() {
 	m.sort = (m.sort + 1) % sortModes
 }
 
+// kindStrings unwraps the conventional kind:* keywords for display — the
+// cycle offers the conventions; the search box takes anything else.
 func kindStrings() []string {
-	out := make([]string, len(domain.Kinds))
-	for i, k := range domain.Kinds {
-		out[i] = string(k)
+	out := make([]string, len(domain.KindTags))
+	for i, tag := range domain.KindTags {
+		out[i] = strings.TrimPrefix(tag, "kind:")
 	}
 	return out
 }
@@ -372,9 +374,10 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, it list.Item)
 
 	width := max(20, m.Width()-4)
 	date := r.CreatedAt.Format("2006-01-02") + " ⏳" + r.ExpiresAt.Format("2006-01-02")
+	kind := domain.KindOf(r.Keywords)
 	keywords := ansi.Truncate(strings.Join(r.Keywords, ", "),
-		max(8, width-len(date)-len(r.Kind)-6), "…")
-	first := fmt.Sprintf("%s %s  %s", d.st.kindBadge(r.Kind),
+		max(8, width-len(date)-len(kind)-6), "…")
+	first := fmt.Sprintf("%s %s  %s", d.st.kindBadge(kind),
 		highlightFuzzy(keywords, *d.terms, keywordStyle, d.st.hit), d.st.dim.Render(date))
 
 	secondary := r.Summary

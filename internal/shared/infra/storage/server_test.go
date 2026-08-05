@@ -47,8 +47,8 @@ func TestExportSnapshot_ProducesLocalCompatibleDB(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	if _, err := store.DB.DB().ExecContext(ctx, `
-		INSERT INTO memories (id, content, summary, kind, keywords, source, ttl_hours, expires_at, created_at)
-		VALUES ('m1', 'exported fact', 's', 'fact', ' k ', 'test', 24, '2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z')`); err != nil {
+		INSERT INTO memories (id, content, summary, keywords, source, ttl_hours, expires_at, created_at)
+		VALUES ('m1', 'exported fact', 's', ' k ', 'test', 24, '2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z')`); err != nil {
 		t.Fatal(err)
 	}
 

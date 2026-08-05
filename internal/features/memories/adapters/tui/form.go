@@ -19,7 +19,6 @@ const (
 	fieldSummary = iota
 	fieldContent
 	fieldKeywords
-	fieldKind
 	fieldTTL
 	fieldCount
 )
@@ -49,7 +48,6 @@ type formModel struct {
 	summary    textinput.Model
 	content    textarea.Model
 	keywords   textinput.Model
-	kindIdx    int
 	ttl        textinput.Model
 	focus      int
 	state      formState
@@ -85,26 +83,15 @@ func newFormModel(st *styles, from *domain.MemoryReadModel, returnTo mode, width
 	find.Prompt = "/ "
 	find.Placeholder = "find in fields"
 
-	kindIdx := max(0, indexOfKind(from.Kind))
-
 	f := &formModel{
 		st: st, supersedes: from.ID,
 		summary: summary, content: content, keywords: keywords,
-		kindIdx: kindIdx, ttl: ttl, find: find,
+		ttl: ttl, find: find,
 		errField: -1, returnTo: returnTo,
 	}
 	f.initial = f.values()
 	f.setSize(width, height)
 	return f
-}
-
-func indexOfKind(kind string) int {
-	for i, k := range domain.Kinds {
-		if string(k) == kind {
-			return i
-		}
-	}
-	return 0
 }
 
 // values snapshots every field as text, for dirty comparison.
@@ -113,7 +100,6 @@ func (f *formModel) values() [fieldCount]string {
 		fieldSummary:  f.summary.Value(),
 		fieldContent:  f.content.Value(),
 		fieldKeywords: f.keywords.Value(),
-		fieldKind:     string(domain.Kinds[f.kindIdx]),
 		fieldTTL:      f.ttl.Value(),
 	}
 }
@@ -170,7 +156,7 @@ func (f *formModel) move(step int) {
 func (f *formModel) typing() bool {
 	switch f.state {
 	case formEdit:
-		return f.focus != fieldKind
+		return true
 	case formFind:
 		return true
 	default:
@@ -187,15 +173,6 @@ func (f *formModel) update(msg tea.Msg) tea.Cmd {
 		f.content, cmd = f.content.Update(msg)
 	case fieldKeywords:
 		f.keywords, cmd = f.keywords.Update(msg)
-	case fieldKind:
-		if key, ok := msg.(tea.KeyMsg); ok {
-			switch key.String() {
-			case "left", "h":
-				f.kindIdx = (f.kindIdx + len(domain.Kinds) - 1) % len(domain.Kinds)
-			case "right", "l", " ":
-				f.kindIdx = (f.kindIdx + 1) % len(domain.Kinds)
-			}
-		}
 	case fieldTTL:
 		f.ttl, cmd = f.ttl.Update(msg)
 	}
@@ -220,7 +197,6 @@ func (f *formModel) input() (managememories.StoreInput, error) {
 	return managememories.StoreInput{
 		Content:    f.content.Value(),
 		Summary:    f.summary.Value(),
-		Kind:       string(domain.Kinds[f.kindIdx]),
 		Keywords:   keywords,
 		Source:     "tui",
 		TTLHours:   ttlHours,
@@ -235,7 +211,6 @@ func (f *formModel) applyError(err error) {
 		summaryErr  *domain.InvalidSummaryError
 		contentErr  *domain.EmptyContentError
 		keywordsErr *domain.NoKeywordsError
-		kindErr     *domain.InvalidKindError
 		ttlErr      *domain.InvalidTTLError
 		superErr    *domain.MemorySupersededError
 	)
@@ -246,8 +221,6 @@ func (f *formModel) applyError(err error) {
 		f.fieldErr, f.errField = "content: must not be empty", fieldContent
 	case errors.As(err, &keywordsErr):
 		f.fieldErr, f.errField = "keywords: at least one, each ≤64 chars", fieldKeywords
-	case errors.As(err, &kindErr):
-		f.fieldErr, f.errField = "kind: pick one of the listed kinds", fieldKind
 	case errors.As(err, &ttlErr):
 		f.fieldErr, f.errField = "ttl: 1 hour to 10 years — every memory expires", fieldTTL
 	case errors.As(err, &superErr):
@@ -304,15 +277,6 @@ func (f *formModel) staticField(value string, maxLines int) string {
 }
 
 func (f *formModel) view() string {
-	kinds := make([]string, len(domain.Kinds))
-	for i, k := range domain.Kinds {
-		if i == f.kindIdx {
-			kinds[i] = f.st.selected.Render("[" + string(k) + "]")
-		} else {
-			kinds[i] = f.st.dim.Render(string(k))
-		}
-	}
-
 	editing := func(field int) bool { return f.state == formEdit && f.focus == field }
 	contentLines := f.content.Height()
 
@@ -334,7 +298,6 @@ func (f *formModel) view() string {
 	writeField(fieldSummary, "summary", f.summary.Value(), f.summary.View, 1)
 	writeField(fieldContent, "content", f.content.Value(), f.content.View, contentLines)
 	writeField(fieldKeywords, "keywords (comma-separated)", f.keywords.Value(), f.keywords.View, 1)
-	b.WriteString(f.label(fieldKind, "kind (←/→)") + "  " + strings.Join(kinds, " ") + "\n\n")
 	writeField(fieldTTL, "ttl", f.ttl.Value(), f.ttl.View, 1)
 
 	if f.state == formFind || f.find.Value() != "" {

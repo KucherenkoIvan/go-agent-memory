@@ -32,7 +32,6 @@ func Run(ctx context.Context, cfg Config) error {
 		grpckit.WithErrorCode("memory_not_found", codes.NotFound),
 		grpckit.WithErrorCode("empty_content", codes.InvalidArgument),
 		grpckit.WithErrorCode("invalid_summary", codes.InvalidArgument),
-		grpckit.WithErrorCode("invalid_kind", codes.InvalidArgument),
 		grpckit.WithErrorCode("no_keywords", codes.InvalidArgument),
 		grpckit.WithErrorCode("empty_source", codes.InvalidArgument),
 		grpckit.WithErrorCode("invalid_ttl", codes.InvalidArgument),

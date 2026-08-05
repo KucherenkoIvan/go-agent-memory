@@ -56,7 +56,6 @@ func (h *Handler) Store(ctx context.Context, req *recallv1.StoreRequest) (*recal
 	id, err := svc.Store(ctx, managememories.StoreInput{
 		Content:  req.GetContent(),
 		Summary:  req.GetSummary(),
-		Kind:     req.GetKind(),
 		Keywords: req.GetKeywords(),
 		// the key identity is the writer — client-supplied source is advisory
 		Source:     ident.KeyName,
@@ -78,7 +77,6 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 		Query:       req.GetQuery(),
 		Keywords:    req.GetKeywords(),
 		KeywordsAny: req.GetKeywordsAny(),
-		Kind:        req.GetKind(),
 		Since:       fromTimestamp(req.GetSince()),
 		Until:       fromTimestamp(req.GetUntil()),
 		Limit:       int(req.GetLimit()),
@@ -94,7 +92,7 @@ func (h *Handler) Search(ctx context.Context, req *recallv1.SearchRequest) (*rec
 	out := make([]*recallv1.SearchResult, 0, len(page.Results))
 	for _, r := range page.Results {
 		out = append(out, &recallv1.SearchResult{
-			Id: r.ID, Summary: r.Summary, Kind: r.Kind, Keywords: r.Keywords,
+			Id: r.ID, Summary: r.Summary, Keywords: r.Keywords,
 			Source: r.Source, CreatedAt: timestamppb.New(r.CreatedAt),
 			ExpiresAt: timestamppb.New(r.ExpiresAt), Snippet: r.Snippet,
 			Score: r.Score, VotesUp: int32(r.VotesUp), VotesDown: int32(r.VotesDown), //nolint:gosec // vote counts
@@ -115,7 +113,7 @@ func (h *Handler) Get(ctx context.Context, req *recallv1.GetRequest) (*recallv1.
 	}
 	return &recallv1.GetResponse{Memory: &recallv1.Memory{
 		Id: model.ID, Content: model.Content, Summary: model.Summary,
-		Kind: model.Kind, Keywords: model.Keywords, Source: model.Source,
+		Keywords: model.Keywords, Source: model.Source,
 		CreatedAt: timestamppb.New(model.CreatedAt), ExpiresAt: timestamppb.New(model.ExpiresAt),
 		SupersededBy: model.SupersededBy,
 		VotesUp:      int32(model.VotesUp), VotesDown: int32(model.VotesDown), //nolint:gosec // vote counts

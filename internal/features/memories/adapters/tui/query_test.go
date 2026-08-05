@@ -70,7 +70,8 @@ func TestRunSearch_EmptyTermsIsTimeline(t *testing.T) {
 	if len(results) != 1 || len(fake.searches) != 1 {
 		t.Fatalf("timeline must be a single fetch: %d searches", len(fake.searches))
 	}
-	if f := fake.searches[0]; f.Kind != "fact" || f.Query != "" || f.KeywordsAny != nil {
+	if f := fake.searches[0]; len(f.Keywords) != 1 || f.Keywords[0] != "kind:fact" ||
+		f.Query != "" || f.KeywordsAny != nil {
 		t.Fatalf("timeline filters: %+v", f)
 	}
 }
@@ -86,7 +87,7 @@ func TestRunSearch_LayersCarryScreenState(t *testing.T) {
 		t.Fatalf("layered search must fetch 3 times, got %d", len(fake.searches))
 	}
 	for i, f := range fake.searches {
-		if f.Kind != "research" || !f.IncludeDead {
+		if len(f.Keywords) != 1 || f.Keywords[0] != "kind:research" || !f.IncludeDead {
 			t.Fatalf("layer %d must keep kind/dead filters: %+v", i, f)
 		}
 	}

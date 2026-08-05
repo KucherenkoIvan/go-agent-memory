@@ -588,10 +588,7 @@ func (a *App) updateFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			f.find.Focus()
 			return a, nil
 		case "h", "l", "left", "right", " ":
-			if f.focus == fieldKind { // kind cycles in place, no edit state
-				return a, f.update(msg)
-			}
-			return a, nil
+			return a, nil // every field is a text field now — nothing cycles in place
 		case "d", "q":
 			a.requestDiscard()
 			return a, nil

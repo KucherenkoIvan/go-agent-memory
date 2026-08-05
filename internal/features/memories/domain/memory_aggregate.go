@@ -13,19 +13,26 @@ import (
 
 type MemoryID string
 
-// Kind classifies what a memory is — it is a search filter, not a hierarchy.
-type Kind string
+// KindTags are the conventional `kind:*` keywords. A convention, not a
+// vocabulary: nothing validates them, nothing requires them, and a memory
+// may carry another one entirely. They exist so human faces have something
+// to offer as a browsing filter — kind was a required column until it
+// proved to be a keyword wearing a schema.
+var KindTags = []string{
+	"kind:fact", "kind:preference", "kind:research",
+	"kind:decision", "kind:location", "kind:reference",
+}
 
-const (
-	KindFact       Kind = "fact"
-	KindPreference Kind = "preference"
-	KindResearch   Kind = "research"
-	KindDecision   Kind = "decision"
-	KindLocation   Kind = "location"
-	KindReference  Kind = "reference"
-)
-
-var Kinds = []Kind{KindFact, KindPreference, KindResearch, KindDecision, KindLocation, KindReference}
+// KindOf returns the value of the first `kind:` keyword, or "" when the
+// memory carries none. Display affordance only — never a filter path.
+func KindOf(keywords []string) string {
+	for _, kw := range keywords {
+		if after, ok := strings.CutPrefix(kw, "kind:"); ok {
+			return after
+		}
+	}
+	return ""
+}
 
 const (
 	maxSummaryLength = 200
@@ -40,7 +47,6 @@ type memoryState struct {
 	id           MemoryID
 	content      string
 	summary      string
-	kind         Kind
 	keywords     []string
 	source       string
 	ttlHours     int // > 0 — every memory expires
@@ -57,7 +63,7 @@ type Memory struct {
 
 // NewMemory validates and creates a memory. Summary is required — it is
 // what search results show, and retrieval quality depends on it.
-func NewMemory(id MemoryID, content, summary string, kind Kind, keywords []string, source string, ttlHours int, createdAt time.Time) (*Memory, error) {
+func NewMemory(id MemoryID, content, summary string, keywords []string, source string, ttlHours int, createdAt time.Time) (*Memory, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return nil, &EmptyContentError{}
@@ -66,10 +72,6 @@ func NewMemory(id MemoryID, content, summary string, kind Kind, keywords []strin
 	summary = normalizeSummary(summary)
 	if summary == "" || len(summary) > maxSummaryLength {
 		return nil, &InvalidSummaryError{}
-	}
-
-	if !slices.Contains(Kinds, kind) {
-		return nil, &InvalidKindError{}
 	}
 
 	normalized := NormalizeKeywords(keywords)
@@ -93,10 +95,10 @@ func NewMemory(id MemoryID, content, summary string, kind Kind, keywords []strin
 	}
 
 	m := &Memory{state: memoryState{
-		id: id, content: content, summary: summary, kind: kind,
+		id: id, content: content, summary: summary,
 		keywords: normalized, source: source, ttlHours: ttlHours, createdAt: createdAt,
 	}}
-	m.PushEvent(NewMemoryStoredEvent(MemoryStoredData{MemoryID: id, Kind: kind, Keywords: normalized}))
+	m.PushEvent(NewMemoryStoredEvent(MemoryStoredData{MemoryID: id, Keywords: normalized}))
 	return m, nil
 }
 
@@ -163,7 +165,6 @@ type MemorySnapshot struct {
 	ID           MemoryID
 	Content      string
 	Summary      string
-	Kind         Kind
 	Keywords     []string
 	Source       string
 	TTLHours     int
@@ -176,7 +177,7 @@ type MemorySnapshot struct {
 func (m *Memory) Snapshot() MemorySnapshot {
 	return MemorySnapshot{
 		ID: m.state.id, Content: m.state.content, Summary: m.state.summary,
-		Kind: m.state.kind, Keywords: slices.Clone(m.state.keywords), Source: m.state.source,
+		Keywords: slices.Clone(m.state.keywords), Source: m.state.source,
 		TTLHours: m.state.ttlHours, CreatedAt: m.state.createdAt,
 		SupersededBy: m.state.supersededBy, VotesUp: m.state.votesUp, VotesDown: m.state.votesDown,
 	}
@@ -184,7 +185,7 @@ func (m *Memory) Snapshot() MemorySnapshot {
 
 func RestoreMemory(s MemorySnapshot) *Memory {
 	return &Memory{state: memoryState{
-		id: s.ID, content: s.Content, summary: s.Summary, kind: s.Kind,
+		id: s.ID, content: s.Content, summary: s.Summary,
 		keywords: slices.Clone(s.Keywords), source: s.Source, ttlHours: s.TTLHours,
 		createdAt: s.CreatedAt, supersededBy: s.SupersededBy,
 		votesUp: s.VotesUp, votesDown: s.VotesDown,

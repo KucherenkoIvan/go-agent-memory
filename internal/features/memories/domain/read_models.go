@@ -7,7 +7,6 @@ import "time"
 type SearchResult struct {
 	ID          string    `json:"id"`
 	Summary     string    `json:"summary"`
-	Kind        string    `json:"kind"`
 	Keywords    []string  `json:"keywords"`
 	Source      string    `json:"source"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -32,7 +31,6 @@ type MemoryReadModel struct {
 	ID           string    `json:"id"`
 	Content      string    `json:"content"`
 	Summary      string    `json:"summary"`
-	Kind         string    `json:"kind"`
 	Keywords     []string  `json:"keywords"`
 	Source       string    `json:"source"`
 	CreatedAt    time.Time `json:"createdAt"`

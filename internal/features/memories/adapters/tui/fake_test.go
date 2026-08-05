@@ -99,7 +99,6 @@ func (f *fakeService) Delete(_ context.Context, id domain.MemoryID) error {
 
 func someResult(id, summary string) domain.SearchResult {
 	return domain.SearchResult{
-		ID: id, Summary: summary, Kind: "fact",
-		Keywords: []string{"k"}, Source: "test", CreatedAt: time.Now(),
+		ID: id, Summary: summary, Keywords: []string{"k"}, Source: "test", CreatedAt: time.Now(),
 	}
 }
