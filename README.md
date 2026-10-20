@@ -20,18 +20,40 @@ make install
 
 Both drop `recall` into `$(go env GOBIN)`, or `$(go env GOPATH)/bin` when that is empty — usually `~/go/bin`. Put that directory on `PATH`, then check with `recall --version`. Memory lives in `~/.local/share/recall/memory.db`, created on first use.
 
-Wire it into your harness as an MCP server, with the **absolute path** — GUI apps often don't inherit your shell's `PATH`:
+Wire it into your harness as an MCP server, with the **absolute path** — GUI apps often don't inherit your shell's `PATH`. `realpath "$(go env GOPATH)/bin/recall"` prints it (use `GOBIN` if you set one). Register it once per harness, globally, so every project shares one memory:
+
+**Claude Code**
 
 ```sh
-# Claude Code (all projects):
 claude mcp add --scope user recall -- "$(go env GOPATH)/bin/recall" run
+claude mcp list    # recall: … ✔ Connected
 ```
+
+**Cursor**: the IDE and the `agent` CLI both read `~/.cursor/mcp.json` (`.cursor/mcp.json` in a project scopes it to that project). Merge in:
 
 ```json
 {"mcpServers": {"recall": {"command": "/home/you/go/bin/recall", "args": ["run"]}}}
 ```
 
-The MCP tools carry their own usage policy. Agents without MCP shell out instead — paste `recall prompt` into their global instructions (AGENTS.md/CLAUDE.md).
+Check with `agent mcp list` (`recall: ready`). Headless `agent -p` runs need `--approve-mcps` to load it.
+
+**Codex**: the CLI, IDE extension, and desktop app share `~/.codex/config.toml`:
+
+```sh
+codex mcp add recall -- "$(go env GOPATH)/bin/recall" run
+```
+
+or add the table by hand:
+
+```toml
+[mcp_servers.recall]
+command = "/home/you/go/bin/recall"
+args = ["run"]
+```
+
+**Anything else MCP-capable**: the same `{"command": "<absolute path>", "args": ["run"]}`.
+
+The MCP tools carry their own usage policy, so nothing else is needed. Agents without MCP shell out instead: paste `recall prompt` into their global instructions (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or Cursor's User Rules).
 
 ## Quick start
 
