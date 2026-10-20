@@ -2,6 +2,8 @@
 
 recall — harness-agnostic memory for AI agents, built on [go-kernel](https://github.com/KucherenkoIvan/go-kernel). The kernel's [architecture docs](https://github.com/KucherenkoIvan/go-kernel/blob/master/docs/architecture/1-service-structure.md) and [DESIGN.md](DESIGN.md) are the source of truth — read DESIGN.md before restructuring anything.
 
+**Just installing recall, not developing it?** Follow the README's [Install](README.md#install) section; the rest of this file is for changing the code.
+
 ## Hard rules
 
 1. **Layer discipline** (lint-enforced where possible):
@@ -39,4 +41,4 @@ After every commit, reinstall the local binary — the version is stamped from `
 make install
 ```
 
-It builds, warns about running `recall run` processes (they keep the old binary until their session restarts), snapshots the live DB in place (`VACUUM INTO`, last 5 kept — the new binary may migrate it on first open), and replaces `~/go/bin/recall` with the rm-then-cp dance (macOS SIGKILLs an executable whose contents were overwritten in place; a fresh inode avoids the stale code-signature cache).
+It builds, warns about running `recall run` processes (they keep the old binary until their session restarts), snapshots the live DB in place (`VACUUM INTO`, last 5 kept — the new binary may migrate it on first open), and replaces `recall` in `go env GOBIN` (or `GOPATH/bin`) with the rm-then-cp dance (macOS SIGKILLs an executable whose contents were overwritten in place; a fresh inode avoids the stale code-signature cache).

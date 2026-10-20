@@ -8,12 +8,35 @@ One binary, `recall`: three long-lived faces behind `recall run`, one-shot comma
 - **CLI** — `recall memory ...`, for agents that shell out: JSON output when piped, exit code 0/1 with machine-readable errors, never a prompt.
 - **TUI** — `recall run -t`, for humans: browse and live-search, read, rate, prune, correct via a pre-filled supersede editor, review downvoted candidates (`R`), and manage the remote endpoint — all against local or hosted memory alike.
 
+## Install
+
+Needs Go 1.25+ (`go version`); pure Go, no cgo, macOS and Linux.
+
+```sh
+go install github.com/KucherenkoIvan/go-agent-memory/cmd/recall@latest
+# or from a clone — same destination, and backs up the db before upgrades:
+make install
+```
+
+Both drop `recall` into `$(go env GOBIN)`, or `$(go env GOPATH)/bin` when that is empty — usually `~/go/bin`. Put that directory on `PATH`, then check with `recall --version`. Memory lives in `~/.local/share/recall/memory.db`, created on first use.
+
+Wire it into your harness as an MCP server, with the **absolute path** — GUI apps often don't inherit your shell's `PATH`:
+
+```sh
+# Claude Code (all projects):
+claude mcp add --scope user recall -- "$(go env GOPATH)/bin/recall" run
+```
+
+```json
+{"mcpServers": {"recall": {"command": "/home/you/go/bin/recall", "args": ["run"]}}}
+```
+
+The MCP tools carry their own usage policy. Agents without MCP shell out instead — paste `recall prompt` into their global instructions (AGENTS.md/CLAUDE.md).
+
 ## Quick start
 
 ```sh
-make build     # bin/recall
-
-# teach your agents the contract — paste the output into AGENTS.md/CLAUDE.md:
+# teach shell-out agents the contract — paste the output into AGENTS.md/CLAUDE.md:
 recall prompt
 
 # the loop agents run — keywords are positional and OR-match (more matches rank higher):
@@ -24,12 +47,6 @@ recall memory rate <id>... up                   # feedback drives future ranking
 recall memory store --summary "one line" -k go -k lint --ttl 2160 "the finding..."
 recall memory store --supersedes <old-id> ...   # corrections replace, never edit
 recall memory delete <id>                       # obsolete beyond correcting: gone for good
-```
-
-MCP config (any harness):
-
-```json
-{"mcpServers": {"recall": {"command": "recall", "args": ["run"]}}}
 ```
 
 ## Shared memory (hosted mode)
